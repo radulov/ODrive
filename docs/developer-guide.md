@@ -95,8 +95,9 @@ __CONFIG_BOARD_VERSION__: The board version you're using. Can be `v3.1`, `v3.2`,
 __CONFIG_USB_PROTOCOL__: Defines which protocol the ODrive should use on the USB interface.
  * `native`: The native ODrive protocol. Use this if you want to use the python tools in this repo.
  * `native-stream`: Like the native ODrive protocol, but the ODrive will treat the USB connection exactly as if it was a UART connection. __Use this if you're on macOS__. This is necessary because macOS doesn't grant our python tools sufficient low-level access to treat the device as the USB device that it is.
- * `ascii`: The ASCII protocol. This allows sending simple commands like position setpoints directly from the terminal to the ODrive without the use of intermediate utilities.
  * `none`: Disable USB. The device will still show up when plugged in but it will ignore any commands.
+ 
+ **Note**: There is a second USB interface that is always a serial port.
 
 __CONFIG_UART_PROTOCOL__: Defines which protocol the ODrive should use on the UART interface (GPIO1 and GPIO2). Note that UART is only supported on ODrive v3.3 and higher.
  * `native`: The native ODrive protocol. Use this if you're connecting the ODrive to a PC using UART and want to use the python tools to control and setup the ODrive.
@@ -110,7 +111,7 @@ You can also modify the compile-time defaults for all `.config` parameters. You 
 
 1. Run `make` in the `Firmware` directory.
 2. Connect the ODrive via USB and power it up.
-3. Flash the firmware using [`odrivetool dfu`](odrivetool#device-firmware-update).
+3. Flash the firmware using [odrivetool dfu](odrivetool#device-firmware-update).
 
 ### Flashing using an STLink/v2 programmer
 
