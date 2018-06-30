@@ -37,7 +37,7 @@ void respond(StreamSink& output, bool include_checksum, const char * fmt, TArgs&
     if (include_checksum) {
         uint8_t checksum = 0;
         for (size_t i = 0; i < len; ++i)
-            checksum ^= response[i];
+        checksum ^= response[i];
         len = snprintf(response, sizeof(response), "*%u", checksum);
         output.process_bytes((uint8_t*)response, len, nullptr);
     }
@@ -55,7 +55,8 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
     uint8_t checksum = 0;
     size_t checksum_start = SIZE_MAX;
     for (size_t i = 0; i < len; ++i) {
-        if (buffer[i] == ';') { // ';' is the comment start char
+        // ';' is the comment start char
+        if (buffer[i] == ';') {
             len = i;
             break;
         }
@@ -78,8 +79,9 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
     if (use_checksum) {
         unsigned int received_checksum;
         sscanf((const char *)cmd + checksum_start, "%u", &received_checksum);
-        if (received_checksum != checksum)
+        if (received_checksum != checksum) {
             return;
+        }
         len = checksum_start - 1; // prune checksum and asterisk
     }
 
@@ -95,10 +97,12 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         } else if (motor_number >= AXIS_COUNT) {
             respond(response_channel, use_checksum, "invalid motor %u", motor_number);
         } else {
-            if (numscan < 3)
+            if (numscan < 3) {
                 vel_feed_forward = 0.0f;
-            if (numscan < 4)
+            }
+            if (numscan < 4) {
                 current_feed_forward = 0.0f;
+            }
             axes[motor_number]->controller_.set_pos_setpoint(pos_setpoint, vel_feed_forward, current_feed_forward);
         }
 
@@ -112,10 +116,9 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             respond(response_channel, use_checksum, "invalid motor %u", motor_number);
         } else {
             if (numscan < 3)
-                current_feed_forward = 0.0f;
+            current_feed_forward = 0.0f;
             axes[motor_number]->controller_.set_vel_setpoint(vel_setpoint, current_feed_forward);
         }
-
     } else if (cmd[0] == 'c') { // current control
         unsigned motor_number;
         float current_setpoint;
@@ -128,13 +131,32 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             axes[motor_number]->controller_.set_current_setpoint(current_setpoint);
         }
 
+    } else if (cmd[0] == 'C') { // dual current control
+        // NATHAN'S CUSTOM CODE
+        float motor0_cur_sp, motor1_cur_sp;
+        int numscan = sscanf(cmd, "C %f %f", &motor0_cur_sp, &motor1_cur_sp);
+
+        if (numscan < 2) {
+            respond(response_channel, use_checksum, "invalid command format");
+        } else {
+            axes[0]->controller_.set_current_setpoint(motor0_cur_sp);
+            axes[1]->controller_.set_current_setpoint(motor1_cur_sp);
+
+            // Sending a current control command triggers the odrive
+            // to send back encoder positions
+            respond(response_channel, use_checksum, "%.1f %.1f",
+                axes[0]->encoder_.pos_estimate_, axes[1]->encoder_.pos_estimate_);
+        }
+
     } else if (cmd[0] == 'h') {  // Help
         respond(response_channel, use_checksum, "Please see documentation for more details");
         respond(response_channel, use_checksum, "");
         respond(response_channel, use_checksum, "Available commands syntax reference:");
+        respond(response_channel, use_checksum, "Device Info: i");
         respond(response_channel, use_checksum, "Position: p axis pos vel-ff I-ff");
         respond(response_channel, use_checksum, "Velocity: v axis vel I-ff");
         respond(response_channel, use_checksum, "Current: c axis I");
+        respond(response_channel, use_checksum, "Current to both motors with response: C I0 I1");
         respond(response_channel, use_checksum, "");
         respond(response_channel, use_checksum, "Properties start at odrive root, such as axis0.requested_state");
         respond(response_channel, use_checksum, "Read: r property");
@@ -160,10 +182,11 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             } else {
                 char response[10];
                 bool success = endpoint->get_string(response, sizeof(response));
-                if (!success)
+                if (!success) {
                     respond(response_channel, use_checksum, "not implemented");
-                else
+                } else {
                     respond(response_channel, use_checksum, response);
+                }
             }
         }
 
@@ -179,12 +202,16 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
                 respond(response_channel, use_checksum, "invalid property");
             } else {
                 bool success = endpoint->set_string(value, sizeof(value));
-                if (!success)
+                if (!success) {
                     respond(response_channel, use_checksum, "not implemented");
+                }
             }
         }
 
-    } else if (cmd[0] != 0) {
+    } else if (cmd[0] == 's') { // save configuration
+        save_configuration();
+    }
+    else if (cmd[0] != 0) {
         respond(response_channel, use_checksum, "unknown command");
     }
 }
@@ -205,8 +232,9 @@ void ASCII_protocol_parse_stream(const uint8_t* buffer, size_t len, StreamSink& 
         uint8_t c = *(buffer++);
         bool is_end_of_line = (c == '\r' || c == '\n' || c == '!');
         if (is_end_of_line) {
-            if (read_active)
+            if (read_active) {
                 ASCII_protocol_process_line(parse_buffer, parse_buffer_idx, response_channel);
+            }
             parse_buffer_idx = 0;
             read_active = true;
         } else {
