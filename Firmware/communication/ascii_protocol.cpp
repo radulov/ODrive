@@ -20,7 +20,7 @@
 /* Global variables ----------------------------------------------------------*/
 /* Private constant data -----------------------------------------------------*/
 
-#define MAX_LINE_LENGTH 256
+#define MAX_LINE_LENGTH 128
 #define TO_STR_INNER(s) #s
 #define TO_STR(s) TO_STR_INNER(s)
 
@@ -33,17 +33,105 @@ template<typename ... TArgs>
 void respond(StreamSink& output, bool include_checksum, const char * fmt, TArgs&& ... args) {
     char response[64];
     size_t len = snprintf(response, sizeof(response), fmt, std::forward<TArgs>(args)...);
-    output.process_bytes((uint8_t*)response, len, nullptr); // TODO: use process_all instead
+
+    static uint8_t start_byte = 1;
+    static uint8_t len_byte = 0;
+    output.process_bytes((uint8_t*) &start_byte, 1, nullptr); // start byte
+    output.process_bytes((uint8_t*) &len_byte,   1, nullptr); // byte indicating newline termination
+    output.process_bytes((uint8_t*)response,   len, nullptr); // TODO: use process_all instead
     if (include_checksum) {
         uint8_t checksum = 0;
-        for (size_t i = 0; i < len; ++i)
-        checksum ^= response[i];
+        for (size_t i = 0; i < len; ++i) {
+            checksum ^= response[i];
+        }
         len = snprintf(response, sizeof(response), "*%u", checksum);
         output.process_bytes((uint8_t*)response, len, nullptr);
     }
-    output.process_bytes((const uint8_t*)"\r\n", 2, nullptr);
+    output.process_bytes((const uint8_t*)"\n", 1, nullptr);
 }
 
+float constrain(float in, float min, float max) {
+    if(in > max) {
+        return max;
+    } else if(in < min) {
+        return min;
+    } else {
+        return in;
+    }
+}
+
+/**
+* Parses a current set point message and sets the set points
+* Assumes the message is in format "C<short1><short2><checksum>\n"
+
+* @param msg   String: Message to parse
+* @param i0    float&: Output parameter for axis0 set point
+* @param i1    float&: Output parameter for axis1 set point
+* @return      int:    1 if success, -1 if failed to find get full message or checksum failed
+*/
+int parseDualCurrent(char* msg, int len, float& i0, float& i1) {
+    // Message: 1 byte for 'C', 4 bytes for values, 1 byte for checksum = 6 total bytes
+    if (len != 6) {
+        return -1; // error in message length
+    } else {
+        // get the short values from the byte array
+        // NOTE: the 1st short starts at index 1! This is because the first character is "C"
+        uint16_t i0_16 = (msg[2] << 8) | msg[1];
+        uint16_t i1_16 = (msg[4] << 8) | msg[3];
+        uint8_t rcvdCheckSum = msg[5];
+
+        // compute checksum, including the character C
+        uint8_t checkSum = 0;
+        checkSum ^= msg[0]; // character 'C'
+        checkSum ^= msg[1];
+        checkSum ^= msg[2];
+        checkSum ^= msg[3];
+        checkSum ^= msg[4];
+
+        // check if the check sum matched
+        if (checkSum == rcvdCheckSum) {
+            // convert to float
+            i0 = (float) ((int16_t) i0_16);
+            i1 = (float) ((int16_t) i1_16);
+            return 1;
+        } else {
+            return -1;
+        }
+    }
+    return 1;
+}
+
+void send_motor_positions(StreamSink& response_channel) {
+    /***** Send encoder readings *****/
+    // Sending a current control command triggers the odrive
+    // to send back encoder positions
+    // The message is in the form: "P<short1><short2><checksum>\n"
+
+    // Cast the positions in counts as 2-byte shorts, it's ok to chop
+    // the decimal part of the position off since we only have accuracy
+    // to 1 count anyways
+    float m0_fl = constrain(axes[0]->encoder_.pos_estimate_, -30000.0, 30000.0);
+    float m1_fl = constrain(axes[1]->encoder_.pos_estimate_, -30000.0, 30000.0);
+
+    int16_t m0_16 = (int16_t) m0_fl;
+    int16_t m1_16 = (int16_t) m1_fl;
+
+    // compute xor checksum (whoa look at me go)
+    uint8_t check_sum = 'P';
+    check_sum ^= (m0_16) & 0xFF;
+    check_sum ^= (m0_16 >> 8) & 0xFF;
+    check_sum ^= (m1_16) & 0xFF;
+    check_sum ^= (m1_16 >> 8) & 0xFF;
+
+    static uint8_t start_byte = 1;
+    static uint8_t len_byte = 6;
+    response_channel.process_bytes((uint8_t*) &start_byte,   1, nullptr);
+    response_channel.process_bytes((uint8_t*) &len_byte,     1, nullptr);
+    response_channel.process_bytes((uint8_t*) "P",           1, nullptr);
+    response_channel.process_bytes((uint8_t*) &m0_16,        2, nullptr);
+    response_channel.process_bytes((uint8_t*) &m1_16,        2, nullptr);
+    response_channel.process_bytes((uint8_t*) &check_sum,    1, nullptr);
+}
 
 // @brief Executes an ASCII protocol command
 // @param buffer buffer of ASCII encoded characters
@@ -51,40 +139,11 @@ void respond(StreamSink& output, bool include_checksum, const char * fmt, TArgs&
 void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& response_channel) {
     static_assert(sizeof(char) == sizeof(uint8_t));
 
-    // scan line to find beginning of checksum and prune comment
-    uint8_t checksum = 0;
-    size_t checksum_start = SIZE_MAX;
-    for (size_t i = 0; i < len; ++i) {
-        // ';' is the comment start char
-        if (buffer[i] == ';') {
-            len = i;
-            break;
-        }
-        if (checksum_start > i) {
-            if (buffer[i] == '*') {
-                checksum_start = i + 1;
-            } else {
-                checksum ^= buffer[i];
-            }
-        }
-    }
-
+    bool use_checksum = false;
     // copy everything into a local buffer so we can insert null-termination
     char cmd[MAX_LINE_LENGTH + 1];
     if (len > MAX_LINE_LENGTH) len = MAX_LINE_LENGTH;
     memcpy(cmd, buffer, len);
-
-    // optional checksum validation
-    bool use_checksum = (checksum_start < len);
-    if (use_checksum) {
-        unsigned int received_checksum;
-        sscanf((const char *)cmd + checksum_start, "%u", &received_checksum);
-        if (received_checksum != checksum) {
-            return;
-        }
-        len = checksum_start - 1; // prune checksum and asterisk
-    }
-
     cmd[len] = 0; // null-terminate
 
     // check incoming packet type
@@ -132,20 +191,19 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         }
 
     } else if (cmd[0] == 'C') { // dual current control
-        // NATHAN'S CUSTOM CODE
         float motor0_cur_sp, motor1_cur_sp;
-        int numscan = sscanf(cmd, "C %f %f", &motor0_cur_sp, &motor1_cur_sp);
+        int result = parseDualCurrent(cmd,len,motor0_cur_sp, motor1_cur_sp);
 
-        if (numscan < 2) {
-            respond(response_channel, use_checksum, "invalid command format");
+        if (result != 1) {
+            respond(response_channel, use_checksum, "Failed on parse or checksum: ");
+            respond(response_channel, use_checksum, cmd);
         } else {
+            // set motor currents
             axes[0]->controller_.set_current_setpoint(motor0_cur_sp);
             axes[1]->controller_.set_current_setpoint(motor1_cur_sp);
 
-            // Sending a current control command triggers the odrive
-            // to send back encoder positions
-            respond(response_channel, use_checksum, "%.1f %.1f",
-                axes[0]->encoder_.pos_estimate_, axes[1]->encoder_.pos_estimate_);
+            // IMPORTANT CODE: send motor encoder readings in response
+            send_motor_positions(response_channel);
         }
 
     } else if (cmd[0] == 'h') {  // Help
@@ -216,31 +274,76 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
     }
 }
 
+/**
+ * 1 indicates the start of a message
+ * Message format: 1 len payload
+ * Note that there is no checksum. Checksums are optional and included in payload.
+ * If len is 0, this means that the receiver should read until a newline character is received.
+ * In all other cases, only read len number of characters.
+ * If you specify a payload length, this allows you to put the '\n' character in the message!
+ * This is important for sending messages with arbitrary bytes, not just alphanumeric values.
+ *
+ * Payload examples "r vbus_voltage", "C<short><short><checksum>"
+ * @param buffer           pointer to constant byte
+ * @param len              [description]
+ * @param response_channel [description]
+ */
+enum RXState { IDLING, READ_LEN, READ_PAYLOAD, READ_PAYLOAD_UNTIL_NL};
 void ASCII_protocol_parse_stream(const uint8_t* buffer, size_t len, StreamSink& response_channel) {
     static uint8_t parse_buffer[MAX_LINE_LENGTH];
-    static bool read_active = true;
     static uint32_t parse_buffer_idx = 0;
+    static size_t payload_length = 0;
+    static RXState rx_state = IDLING;
+    const uint8_t START_BYTE = 1;
 
     while (len--) {
-        // if the line becomes too long, reset buffer and wait for the next line
-        if (parse_buffer_idx >= MAX_LINE_LENGTH) {
-            read_active = false;
-            parse_buffer_idx = 0;
-        }
-
         // Fetch the next char
         uint8_t c = *(buffer++);
-        bool is_end_of_line = (c == '\r' || c == '\n' || c == '!');
-        if (is_end_of_line) {
-            if (read_active) {
-                ASCII_protocol_process_line(parse_buffer, parse_buffer_idx, response_channel);
-            }
-            parse_buffer_idx = 0;
-            read_active = true;
-        } else {
-            if (read_active) {
-                parse_buffer[parse_buffer_idx++] = c;
-            }
+
+        switch(rx_state) {
+            case IDLING: // wait for start byte to be received
+                if(c == START_BYTE) {
+                    rx_state = READ_LEN;
+                }
+                break;
+
+            case READ_LEN: // use the incoming byte as payload_length
+                payload_length = c; // implicitly casting uint8_t to size_t
+
+                // If the payload is too big, probably a misread, and send
+                // the receiver back to looking for the start byte
+                if (payload_length >= MAX_LINE_LENGTH) {
+                    rx_state = IDLING;
+                } else if (payload_length == 0) {
+                    rx_state = READ_PAYLOAD_UNTIL_NL;
+                } else {
+                    rx_state = READ_PAYLOAD;
+                }
+                break;
+
+            case READ_PAYLOAD_UNTIL_NL: // read newline-terminated message
+                parse_buffer[parse_buffer_idx++] = c; // store data in buffer
+
+                if (c == '\n') { // check for stop character, aka newline
+                    ASCII_protocol_process_line(parse_buffer, parse_buffer_idx, response_channel);
+                    rx_state = IDLING;
+                    parse_buffer_idx = 0;
+                    payload_length = 0;
+                }
+                break;
+
+            case READ_PAYLOAD: // read message with a fixed payload length
+                parse_buffer[parse_buffer_idx++] = c; // store data in buffer
+
+                // If we read all the data, reset the read cycle
+                if (parse_buffer_idx == payload_length) {
+                    // send complete payload to line processor
+                    ASCII_protocol_process_line(parse_buffer, parse_buffer_idx, response_channel);
+                    rx_state = IDLING;
+                    parse_buffer_idx = 0;
+                    payload_length = 0;
+                }
+                break;
         }
     }
 }
