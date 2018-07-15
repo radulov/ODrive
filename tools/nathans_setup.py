@@ -206,25 +206,26 @@ def full_calibration(odrv, app_shutdown_token):
 
     print_configs(odrv0)
 
-def bare_bones_calibration(odrv0, app_shutdown_token):
+def bare_bones_calibration(app_shutdown_token, reset=True):
     """
     Just calibrate motors and basic gains
     """
-    
+
     odrv0 = get_odrive(app_shutdown_token)
-    reset_odrive(odrv0)
-    odrv0 = get_odrive(app_shutdown_token)
+    if reset:
+        reset_odrive(odrv0)
+        odrv0 = get_odrive(app_shutdown_token)
 
     init_odrive(odrv0)
     set_odrive_gains(odrv0)
 
-    calibrate_motor(odrv0, axis0)
-    calibrate_motor(odrv0, axis1)
+    calibrate_motor(odrv0, odrv0.axis0)
+    calibrate_motor(odrv0, odrv0.axis1)
 
-    odrv0.axis0.config.startup_encoder_offset_search = True
-    odrv0.axis1.config.startup_encoder_offset_search = True
+    odrv0.axis0.config.startup_encoder_offset_calibration = True
+    odrv0.axis1.config.startup_encoder_offset_calibration = True
     odrv0.axis0.config.startup_closed_loop_control = True
-    odrv0.axis0.config.startup_closed_loop_control = True
+    odrv0.axis1.config.startup_closed_loop_control = True
 
     odrv0.save_configuration()
 
@@ -239,7 +240,7 @@ def main(app_shutdown_token):
     WARNING: Saving more than twice per boot will cause a reversion of all changes
     """
     # full_calibration(odrv0,app_shutdown_token)
-    bare_bones_calibration(odrv0, app_shutdown_token)
+    bare_bones_calibration(app_shutdown_token, reset=False)
 
 
     # set_odrive_gains(odrv0)
