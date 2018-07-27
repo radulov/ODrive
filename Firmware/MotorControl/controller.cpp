@@ -83,21 +83,16 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     // Only runs if anticogging_.calib_anticogging is true; non-blocking
     anticogging_calibration(pos_estimate, vel_estimate);
     
-    // Position control
-    // TODO Decide if we want to use encoder or pll position here
-    float vel_des = vel_setpoint_;
-    if (config_.control_mode >= CTRL_MODE_POSITION_CONTROL) {
+    // PD control
+    float Iq = 0.0f;
+
+    if (config_.control_mode == CTRL_MODE_POSITION_CONTROL) {
         float pos_err = pos_setpoint_ - pos_estimate;
-        vel_des += config_.pos_gain * pos_err;
+        Iq += config_.pos_gain * pos_err;
+
+        float vel_err = 0 - vel_estimate;
+        Iq += config_.vel_gain * vel_err;
     }
-
-    // Velocity limiting
-    float vel_lim = config_.vel_limit;
-    if (vel_des > vel_lim) vel_des = vel_lim;
-    if (vel_des < -vel_lim) vel_des = -vel_lim;
-
-    // Velocity control
-    float Iq = current_setpoint_;
 
     // Anti-cogging is enabled after calibration
     // We get the current position and apply a current feed-forward
@@ -105,14 +100,6 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     if (anticogging_.use_anticogging) {
         Iq += anticogging_.cogging_map[mod(static_cast<int>(pos_estimate), axis_->encoder_.config_.cpr)];
     }
-
-    float v_err = vel_des - vel_estimate;
-    if (config_.control_mode >= CTRL_MODE_VELOCITY_CONTROL) {
-        Iq += config_.vel_gain * v_err;
-    }
-
-    // Velocity integral action before limiting
-    Iq += vel_integrator_current_;
 
     // Current limiting
     float Ilim = std::min(axis_->motor_.config_.current_lim, axis_->motor_.current_control_.max_allowed_current);
@@ -124,19 +111,6 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     if (Iq < -Ilim) {
         limited = true;
         Iq = -Ilim;
-    }
-
-    // Velocity integrator (behaviour dependent on limiting)
-    if (config_.control_mode < CTRL_MODE_VELOCITY_CONTROL) {
-        // reset integral if not in use
-        vel_integrator_current_ = 0.0f;
-    } else {
-        if (limited) {
-            // TODO make decayfactor configurable
-            vel_integrator_current_ *= 0.99f;
-        } else {
-            vel_integrator_current_ += (config_.vel_integrator_gain * current_meas_period) * v_err;
-        }
     }
 
     if (current_setpoint_output) *current_setpoint_output = Iq;
