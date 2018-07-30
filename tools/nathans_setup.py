@@ -18,8 +18,9 @@ def set_gains(odrv,axis):
     """
     Sets the nested PID gains to a good default
     """
-    axis.controller.config.pos_gain = 20.0 #f [(counts/s) / counts]
+    axis.controller.config.pos_gain = 100.0 #f [(counts/s) / counts]
     axis.controller.config.vel_gain = 5.0 / 10000.0 #[A/(counts/s)]
+    axis.controller.config.vel_limit = 50000.0;
     axis.controller.config.vel_integrator_gain = 0 #[A/((counts/s) * s)]
 
 def calibrate_motor(odrv, axis):
@@ -98,8 +99,8 @@ def init_odrive(odrv):
     odrv.axis0.encoder.config.cpr = 2000
     odrv.axis1.encoder.config.cpr = 2000
 
-    odrv.axis0.motor.config.current_lim = 20
-    odrv.axis1.motor.config.current_lim = 20
+    odrv.axis0.motor.config.current_lim = 40
+    odrv.axis1.motor.config.current_lim = 40
 
     odrv.axis0.motor.config.calibration_current = 10
     odrv.axis1.motor.config.calibration_current = 10
