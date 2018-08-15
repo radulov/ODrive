@@ -206,6 +206,18 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             send_motor_positions(response_channel);
         }
 
+    } else if (cmd[0] == 'D') { // dual current control
+        float theta_sp, gamma_sp;
+        int result = parseDualCurrent(cmd,theta_sp, gamma_sp);
+
+        if (result != 1) {
+            respond(response_channel, use_checksum, "Failed on parse or checksum: ");
+            respond(response_channel, use_checksum, cmd);
+        } else {
+            axes[0]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
+            axes[1]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
+        }
+
     } else if (cmd[0] == 'h') {  // Help
         respond(response_channel, use_checksum, "Please see documentation for more details");
         respond(response_channel, use_checksum, "");

@@ -44,6 +44,15 @@ void Controller::set_current_setpoint(float current_setpoint) {
 #endif
 }
 
+void Controller::set_coupled_setpoints(float theta_setpoint, float gamma_setpoint) {
+    theta_setpoint_ = theta_setpoint;
+    gamma_setpoint_ = gamma_setpoint;
+    config_.control_mode = CTRL_MODE_COUPLED_CONTROL;
+#ifdef DEBUG_PRINT
+    printf("COUPLED_CONTROL %3.3f %3.3f\n", theta_setpoint_, gamma_setpoint_);
+#endif
+}
+
 void Controller::start_anticogging_calibration() {
     // Ensure the cogging map was correctly allocated earlier and that the motor is capable of calibrating
     if (anticogging_.cogging_map != NULL && axis_->error_ == Axis::ERROR_NONE) {
@@ -55,7 +64,7 @@ void Controller::start_anticogging_calibration() {
  * This anti-cogging implementation iterates through each encoder position,
  * waits for zero velocity & position error,
  * then samples the current required to maintain that position.
- * 
+ *
  * This holding current is added as a feedforward term in the control loop.
  */
 bool Controller::anticogging_calibration(float pos_estimate, float vel_estimate) {
@@ -82,7 +91,7 @@ bool Controller::anticogging_calibration(float pos_estimate, float vel_estimate)
 bool Controller::update(float pos_estimate, float vel_estimate, float* current_setpoint_output) {
     // Only runs if anticogging_.calib_anticogging is true; non-blocking
     anticogging_calibration(pos_estimate, vel_estimate);
-    
+
     // PD control
     float Iq = 0.0f;
 
@@ -92,6 +101,33 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
         float vel_err = 0 - vel_estimate;
         Iq += config_.vel_gain * vel_err;
+    }
+
+    // Coupled PD control
+    if (config_.control_mode == CTRL_MODE_COUPLED_CONTROL) {
+      float alpha = axes[0]->encoder_.pos_estimate_;
+      float beta = axes[1]->encoder_.pos_estimate_;
+      float d_alpha = axes[0]->encoder_.pll_vel_;
+      float d_beta = axes[1]->encoder_.pll_vel_;
+
+      float theta = alpha/2.0 + beta/2.0;
+      float gamma = beta/2.0 - alpha/2.0;
+      float d_theta = d_alpha/2.0 + d_beta/2.0;
+      float d_gamma = d_beta/2.0 - d_alpha/2.0;
+
+      float p_term_theta = config_.kp_theta * (theta_setpoint_ - theta);
+      float d_term_theta = config_.kd_theta * (0 - d_theta);
+
+      float p_term_gamma = config_.kp_gamma * (gamma_setpoint_ - gamma);
+      float d_term_gamma = config_.kd_gamma * (0 - d_gamma);
+
+      float tau_theta = p_term_theta + d_term_theta;
+      float tau_gamma = p_term_gamma + d_term_gamma;
+
+      float axes[0]->controller_.current_setpoint_ = tau_theta*0.5 - tau_gamma*0.5;
+      float axes[1]->controller_.current_setpoint_ = tau_theta*0.5 + tau_gamma*0.5;
+
+      Iq = current_setpoint_;
     }
 
     // Anti-cogging is enabled after calibration
