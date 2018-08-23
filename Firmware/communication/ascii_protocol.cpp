@@ -210,6 +210,11 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         float theta_sp, gamma_sp;
         int result = parseDualCurrent(cmd,theta_sp, gamma_sp);
 
+        const float MULTIPLIER = 1000.0;
+
+        theta_sp /= MULTIPLIER;
+        gamma_sp /= MULTIPLIER;
+
         if (result != 1) {
             respond(response_channel, use_checksum, "Failed on parse or checksum: ");
             respond(response_channel, use_checksum, cmd);

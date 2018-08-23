@@ -45,12 +45,16 @@ void Controller::set_current_setpoint(float current_setpoint) {
 }
 
 void Controller::set_coupled_setpoints(float theta_setpoint, float gamma_setpoint) {
-    theta_setpoint_ = theta_setpoint;
-    gamma_setpoint_ = gamma_setpoint;
+    theta_setpoint_ = rad_to_encoder(theta_setpoint);
+    gamma_setpoint_ = rad_to_encoder(gamma_setpoint);
     config_.control_mode = CTRL_MODE_COUPLED_CONTROL;
 #ifdef DEBUG_PRINT
     printf("COUPLED_CONTROL %3.3f %3.3f\n", theta_setpoint_, gamma_setpoint_);
 #endif
+}
+
+float rad_to_encoder(float theta) {
+    return theta * axis_->encoder_.config_.cpr * config_.gear_ratio / (2 * M_PI);
 }
 
 void Controller::start_anticogging_calibration() {

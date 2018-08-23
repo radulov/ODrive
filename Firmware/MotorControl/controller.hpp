@@ -27,6 +27,8 @@ struct ControllerConfig_t {
     float kd_theta = 5.0f / 10000.0f;
     float kp_gamma = 15.0f;
     float kd_gamma = 5.0f / 10000.0f;
+
+    float gear_ratio = 3.0;
 };
 
 class Controller {
@@ -38,6 +40,8 @@ public:
     void set_vel_setpoint(float vel_setpoint, float current_feed_forward);
     void set_current_setpoint(float current_setpoint);
     void set_coupled_setpoints(float theta_setpoint, float gamma_setpoint);
+
+    float rad_to_encoder(float theta);
 
     // TODO: make this more similar to other calibration loops
     void start_anticogging_calibration();
