@@ -53,7 +53,7 @@ void Controller::set_coupled_setpoints(float theta_setpoint, float gamma_setpoin
 #endif
 }
 
-float encoder_to_rad(float x) {
+float Controller::encoder_to_rad(float x) {
     return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2 * M_PI;
 }
 
@@ -128,8 +128,8 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
       float tau_theta = p_term_theta + d_term_theta;
       float tau_gamma = p_term_gamma + d_term_gamma;
 
-      float axes[0]->controller_.current_setpoint_ = tau_theta*0.5 - tau_gamma*0.5;
-      float axes[1]->controller_.current_setpoint_ = tau_theta*0.5 + tau_gamma*0.5;
+      axes[0]->controller_.current_setpoint_ = tau_theta*0.5 - tau_gamma*0.5;
+      axes[1]->controller_.current_setpoint_ = tau_theta*0.5 + tau_gamma*0.5;
 
       Iq = current_setpoint_;
     }

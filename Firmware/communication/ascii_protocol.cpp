@@ -208,7 +208,7 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
 
     } else if (cmd[0] == 'D') { // dual current control
         float theta_sp, gamma_sp;
-        int result = parseDualCurrent(cmd,theta_sp, gamma_sp);
+        int result = parseDualCurrent(cmd,len,theta_sp, gamma_sp);
 
         const float MULTIPLIER = 1000.0;
 

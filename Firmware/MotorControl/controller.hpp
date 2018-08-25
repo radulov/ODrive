@@ -83,7 +83,7 @@ public:
     float current_setpoint_ = 0.0f;        // [A]
 
     float theta_setpoint_ = 0.0f;
-    float gamma_setpoint_ = 90.0f;
+    float gamma_setpoint_ = M_PI/2.0f;
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
