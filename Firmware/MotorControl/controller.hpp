@@ -23,7 +23,7 @@ struct ControllerConfig_t {
     float vel_integrator_gain = 10.0f / 10000.0f;  // [A/(counts/s * s)]
     float vel_limit = 20000.0f;           // [counts/s]
 
-    float kp_theta = 0.01 * 6000 / (2 * M_PI);
+    float kp_theta = 0.04 * 6000 / (2 * M_PI);
     float kd_theta = 5.0f / 10000.0f * 6000 / (2 * M_PI);
     float kp_gamma = 0.01 * 6000 / (2 * M_PI);
     float kd_gamma = 5.0f / 10000.0f * 6000 / (2 * M_PI);
