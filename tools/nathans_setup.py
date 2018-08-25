@@ -18,9 +18,14 @@ def set_gains(odrv,axis):
     """
     Sets the nested PID gains to a good default
     """
-    axis.controller.config.pos_gain = 20.0 #f [(counts/s) / counts]
+    axis.controller.config.pos_gain = 0.01 #f [(counts/s) / counts]
     axis.controller.config.vel_gain = 5.0 / 10000.0 #[A/(counts/s)]
     axis.controller.config.vel_integrator_gain = 0 #[A/((counts/s) * s)]
+
+    axis.controller.config.kp_theta = 0.04 *  6000 / (2 * math.pi)
+    axis.controller.config.kd_theta = 5.0 / 10000.0 *  6000 / (2 * math.pi)
+    axis.controller.config.kp_gamma = 0.0 *  6000 / (2 * math.pi)
+    axis.controller.config.kd_gamma = 5.0 / 10000.0 *  6000 / (2 * math.pi)
 
 def calibrate_motor(odrv, axis):
     # time.sleep(0.5)
@@ -241,8 +246,8 @@ def main(app_shutdown_token):
 
     WARNING: Saving more than twice per boot will cause a reversion of all changes
     """
-    full_calibration(app_shutdown_token)
-    # bare_bones_calibration(app_shutdown_token, reset=False)
+    #full_calibration(app_shutdown_token)
+    bare_bones_calibration(app_shutdown_token, reset=False)
 
 
     # set_odrive_gains(odrv0)
