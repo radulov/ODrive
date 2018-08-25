@@ -109,8 +109,8 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
     // Coupled PD control
     if (config_.control_mode == CTRL_MODE_COUPLED_CONTROL) {
-      float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_);
-      float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) + M_PI; // Assumes legs started 180 apart
+      float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) - M_PI/2.0;
+      float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) + M_PI/2.0; // Assumes legs started 180 apart
       float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
       float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
 
