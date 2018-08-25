@@ -41,7 +41,7 @@ public:
     void set_current_setpoint(float current_setpoint);
     void set_coupled_setpoints(float theta_setpoint, float gamma_setpoint);
 
-    float rad_to_encoder(float theta);
+    float encoder_to_rad(float x);
 
     // TODO: make this more similar to other calibration loops
     void start_anticogging_calibration();

@@ -180,7 +180,7 @@ def print_configs(odrv0):
     print('\n')
     print(odrv0.axis1.config)
 
-def full_calibration(odrv, app_shutdown_token):
+def full_calibration(app_shutdown_token):
     """
     Reset the odrive and calibrate everything:
     1) Gains and limits
@@ -201,8 +201,10 @@ def full_calibration(odrv, app_shutdown_token):
 
     odrv0.save_configuration()
 
-    run_state(axis=odrv0.axis0, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
-    run_state(axis=odrv0.axis1, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #run_state(axis=odrv0.axis0, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #run_state(axis=odrv0.axis1, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #odrv0.axis0.controller.pos_setpoint = 0;
+    #odrv0.axis1.controller.pos_setpoint = 0;
 
     print_configs(odrv0)
 
@@ -239,8 +241,8 @@ def main(app_shutdown_token):
 
     WARNING: Saving more than twice per boot will cause a reversion of all changes
     """
-    # full_calibration(odrv0,app_shutdown_token)
-    bare_bones_calibration(app_shutdown_token, reset=False)
+    full_calibration(app_shutdown_token)
+    # bare_bones_calibration(app_shutdown_token, reset=False)
 
 
     # set_odrive_gains(odrv0)
