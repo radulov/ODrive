@@ -53,6 +53,20 @@ void Controller::set_coupled_setpoints(float theta_setpoint, float gamma_setpoin
 #endif
 }
 
+/**
+ * Set gains for coupled PD control
+ */
+void Controller::set_coupled_gains(float kp_theta, float kd_theta, float kp_gamma, float kd_gamma) {
+    config_.kp_theta = kp_theta;
+    config_.kd_theta = kd_theta;
+    config_.kp_gamma = kp_gamma;
+    config_.kd_gamma = kd_gamma;
+    config_.control_mode = CTRL_MODE_COUPLED_CONTROL;
+#ifdef DEBUG_PRINT
+    printf("COUPLED_CONTROL %3.3f %3.3f %3.3f %3.3f\n", kp_theta, kd_theta, kp_gamma, kd_gamma);
+#endif
+}
+
 float Controller::encoder_to_rad(float x) {
     return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2 * M_PI;
 }

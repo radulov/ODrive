@@ -65,11 +65,12 @@ float constrain(float in, float min, float max) {
 * Assumes the message is in format "C<short1><short2><checksum>\n"
 
 * @param msg   String: Message to parse
+* @param len   int: Number of bytes in the char array
 * @param i0    float&: Output parameter for axis0 set point
 * @param i1    float&: Output parameter for axis1 set point
 * @return      int:    1 if success, -1 if failed to find get full message or checksum failed
 */
-int parseDualCurrent(char* msg, int len, float& i0, float& i1) {
+int parse_dual_current(char* msg, int len, float& i0, float& i1) {
     // Message: 1 byte for 'C', 4 bytes for values, 1 byte for checksum = 6 total bytes
     if (len != 6) {
         return -1; // error in message length
@@ -99,6 +100,68 @@ int parseDualCurrent(char* msg, int len, float& i0, float& i1) {
         }
     }
     return 1;
+}
+
+/**
+* Parses a command for coupled position control
+* Assumes the message is in format "S<short1><short2>...<short12><checksum>\n"
+
+* @param msg        String: Message to parse
+* @param len        int: Number of bytes in the char array
+* @param sp_theta   float&: Output parameter for theta position set point
+* @param kp_theta   float&: Output parameter for theta position gain
+* @param kd_theta   float&: Output parameter for theta derivative gain
+* @param sp_gamma   float&: Output parameter for gamma position set point
+* @param kp_gamma   float&: Output parameter for gamma position gain
+* @param kp_gamma   float&: Output parameter for gamma derivative gain
+
+* @return      int:    1 if success, -1 if failed to find get full message or checksum failed
+*/
+int parse_coupled_command(char* msg, int len, 
+                        float& sp_theta, float& kp_theta, float& kd_theta, 
+                        float& sp_gamma, float& kp_gamma, float& kd_gamma) {
+    // Message: 1 byte for 'S', 12 bytes for values, 1 byte for checksum = 14 total bytes
+    if (len != 14) {
+        return -1; // error in message length
+    } else {
+        // extract the short values from the byte array
+        uint16_t sp_theta_16 = (msg[2] << 8) | msg[1];
+        uint16_t kp_theta_16 = (msg[4] << 8) | msg[3];
+        uint16_t kd_theta_16 = (msg[6] << 8) | msg[5];
+        uint16_t sp_gamma_16 = (msg[8] << 8) | msg[7];
+        uint16_t kp_gamma_16 = (msg[10] << 8) | msg[9];
+        uint16_t kd_gamma_16 = (msg[12] << 8) | msg[11];
+        uint8_t rcvdCheckSum = msg[13];
+
+        // compute checksum, including the 'S'
+        uint8_t checkSum = 0;
+        for(int i = 0; i < len-1; i++) {
+            checkSum ^= msg[i]; 
+        }
+
+        // check if the computed check sum matches the received checksum
+        if (checkSum == rcvdCheckSum) {
+            // convert to float
+            // TODO: verify that I don't need to manually cast the unsigned integer values into floats
+            
+            static const float POS_MULTIPLIER = 1000.0f; 
+            // ^ gives 1 encoder count precision in commanding set points. Receivable range is -32.767 to 32.767 radians.
+            
+            static const float GAIN_MULTIPLIER = 100.0f; 
+            // ^ gives 0.01 precision in setting gains. Receivable range is -327.67 to 327.67.
+
+            sp_theta = sp_theta_16 / POS_MULTIPLIER;
+            kp_theta = kp_theta_16 / GAIN_MULTIPLIER;
+            kd_theta = kd_theta_16 / GAIN_MULTIPLIER;
+            sp_gamma = sp_gamma_16 / POS_MULTIPLIER;
+            kp_gamma = kp_gamma_16 / GAIN_MULTIPLIER;
+            kd_gamma = kd_gamma_16 / GAIN_MULTIPLIER;
+            return 1;
+        } else {
+            return -1;
+        }
+    }
+    return 1;    
 }
 
 void send_motor_positions(StreamSink& response_channel) {
@@ -192,7 +255,7 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
 
     } else if (cmd[0] == 'C') { // dual current control
         float motor0_cur_sp, motor1_cur_sp;
-        int result = parseDualCurrent(cmd,len,motor0_cur_sp, motor1_cur_sp);
+        int result = parse_dual_current(cmd,len,motor0_cur_sp, motor1_cur_sp);
 
         if (result != 1) {
             respond(response_channel, use_checksum, "Failed on parse or checksum: ");
@@ -208,7 +271,7 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
 
     } else if (cmd[0] == 'P') { // coupled control
         float theta_sp, gamma_sp;
-        int result = parseDualCurrent(cmd,len,theta_sp, gamma_sp);
+        int result = parse_dual_current(cmd,len,theta_sp, gamma_sp);
 
         const float MULTIPLIER = 1000.0;
 
@@ -222,7 +285,22 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             axes[0]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
             axes[1]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
         }
+    } else if (cmd[0] == 'S') { // coupled control with gains
+        float sp_theta, kp_theta, kd_theta;
+        float sp_gamma, kp_gamma, kd_gamma;
 
+        int result = parse_coupled_command(cmd, len, sp_theta, kp_theta, kd_theta, sp_gamma, kp_gamma, kd_gamma);
+
+        if (result != 1) {
+            respond(response_channel, use_checksum, "Failed to parse coupled command: ");
+            respond(response_channel, use_checksum, cmd);
+        } else {
+            axes[0]->controller_.set_coupled_setpoints(sp_theta, sp_gamma);
+            axes[0]->controller_.set_coupled_gains(kp_theta, kd_theta, kp_gamma, kd_gamma);
+            
+            axes[1]->controller_.set_coupled_setpoints(sp_theta, sp_gamma);
+            axes[1]->controller_.set_coupled_gains(kp_theta, kd_theta, kp_gamma, kd_gamma);
+        }
     } else if (cmd[0] == 'h') {  // Help
         respond(response_channel, use_checksum, "Please see documentation for more details");
         respond(response_channel, use_checksum, "");

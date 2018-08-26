@@ -40,6 +40,7 @@ public:
     void set_vel_setpoint(float vel_setpoint, float current_feed_forward);
     void set_current_setpoint(float current_setpoint);
     void set_coupled_setpoints(float theta_setpoint, float gamma_setpoint);
+    void set_coupled_gains(float kp_theta, float kd_theta, float kp_gamma, float kd_gamma);
 
     float encoder_to_rad(float x);
 
