@@ -122,30 +122,32 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     }
 
     // Coupled PD control
+    // The convention we're using is that alpha and beta are measured from the downward vertical
+    // both increasing in the CCW direction.
     if (config_.control_mode == CTRL_MODE_COUPLED_CONTROL) {
-      float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) - M_PI/2.0;
-      float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) + M_PI/2.0; // Assumes legs started 180 apart
-      float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
-      float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
+        float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) + M_PI/2.0f;
+        float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) - M_PI/2.0f; // Assumes legs started 180 apart
+        float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
+        float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
 
-      float theta = alpha/2.0 + beta/2.0;
-      float gamma = beta/2.0 - alpha/2.0;
-      float d_theta = d_alpha/2.0 + d_beta/2.0;
-      float d_gamma = d_beta/2.0 - d_alpha/2.0;
+        float theta = alpha/2.0f + beta/2.0f;
+        float gamma = alpha/2.0f - beta/2.0f;
+        float d_theta = d_alpha/2.0f + d_beta/2.0f;
+        float d_gamma = d_alpha/2.0f - d_beta/2.0f;
 
-      float p_term_theta = config_.kp_theta * (theta_setpoint_ - theta);
-      float d_term_theta = config_.kd_theta * (0 - d_theta);
+        float p_term_theta = config_.kp_theta * (theta_setpoint_ - theta);
+        float d_term_theta = config_.kd_theta * (0.0f - d_theta);
 
-      float p_term_gamma = config_.kp_gamma * (gamma_setpoint_ - gamma);
-      float d_term_gamma = config_.kd_gamma * (0 - d_gamma);
+        float p_term_gamma = config_.kp_gamma * (gamma_setpoint_ - gamma);
+        float d_term_gamma = config_.kd_gamma * (0.0f - d_gamma);
 
-      float tau_theta = p_term_theta + d_term_theta;
-      float tau_gamma = p_term_gamma + d_term_gamma;
+        float tau_theta = p_term_theta + d_term_theta;
+        float tau_gamma = p_term_gamma + d_term_gamma;
 
-      axes[0]->controller_.current_setpoint_ = tau_theta*0.5 - tau_gamma*0.5;
-      axes[1]->controller_.current_setpoint_ = tau_theta*0.5 + tau_gamma*0.5;
+        axes[0]->controller_.current_setpoint_ = tau_theta*0.5f + tau_gamma*0.5f;
+        axes[1]->controller_.current_setpoint_ = tau_theta*0.5f - tau_gamma*0.5f;
 
-      Iq = current_setpoint_;
+        Iq = current_setpoint_;
     }
 
     // Anti-cogging is enabled after calibration
