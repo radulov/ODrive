@@ -120,6 +120,12 @@ int parse_dual_current(char* msg, int len, float& i0, float& i1) {
 int parse_coupled_command(char* msg, int len, 
                         float& sp_theta, float& kp_theta, float& kd_theta, 
                         float& sp_gamma, float& kp_gamma, float& kd_gamma) {
+    // Set multipliers:
+    const float POS_MULTIPLIER = 1000.0f; 
+    // ^ gives 1 encoder count precision in commanding set points. Receivable range is -32.767 to 32.767 radians.    
+    const float GAIN_MULTIPLIER = 100.0f; 
+    // ^ gives 0.01 precision in setting gains. Receivable range is -327.67 to 327.67.
+
     // Message: 1 byte for 'S', 12 bytes for values, 1 byte for checksum = 14 total bytes
     if (len != 14) {
         return -1; // error in message length
@@ -142,20 +148,12 @@ int parse_coupled_command(char* msg, int len,
         // check if the computed check sum matches the received checksum
         if (checkSum == rcvdCheckSum) {
             // convert to float
-            // TODO: verify that I don't need to manually cast the unsigned integer values into floats
-            
-            static const float POS_MULTIPLIER = 1000.0f; 
-            // ^ gives 1 encoder count precision in commanding set points. Receivable range is -32.767 to 32.767 radians.
-            
-            static const float GAIN_MULTIPLIER = 100.0f; 
-            // ^ gives 0.01 precision in setting gains. Receivable range is -327.67 to 327.67.
-
-            sp_theta = sp_theta_16 / POS_MULTIPLIER;
-            kp_theta = kp_theta_16 / GAIN_MULTIPLIER;
-            kd_theta = kd_theta_16 / GAIN_MULTIPLIER;
-            sp_gamma = sp_gamma_16 / POS_MULTIPLIER;
-            kp_gamma = kp_gamma_16 / GAIN_MULTIPLIER;
-            kd_gamma = kd_gamma_16 / GAIN_MULTIPLIER;
+            sp_theta = (int16_t)(sp_theta_16) / POS_MULTIPLIER;
+            kp_theta = (int16_t)(kp_theta_16) / GAIN_MULTIPLIER;
+            kd_theta = (int16_t)(kd_theta_16) / GAIN_MULTIPLIER;
+            sp_gamma = (int16_t)(sp_gamma_16) / POS_MULTIPLIER;
+            kp_gamma = (int16_t)(kp_gamma_16) / GAIN_MULTIPLIER;
+            kd_gamma = (int16_t)(kd_gamma_16) / GAIN_MULTIPLIER;
             return 1;
         } else {
             return -1;
