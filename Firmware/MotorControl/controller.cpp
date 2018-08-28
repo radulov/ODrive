@@ -68,7 +68,7 @@ void Controller::set_coupled_gains(float kp_theta, float kd_theta, float kp_gamm
 }
 
 float Controller::encoder_to_rad(float x) {
-    return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2 * M_PI;
+    return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2.0f * M_PI;
 }
 
 void Controller::start_anticogging_calibration() {
