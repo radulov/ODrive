@@ -71,6 +71,7 @@ float constrain(float in, float min, float max) {
 * @return      int:    1 if success, -1 if failed to find get full message or checksum failed
 */
 int parse_dual_current(char* msg, int len, float& i0, float& i1) {
+    const float MULTIPLIER = 100.0f;
     // Message: 1 byte for 'C', 4 bytes for values, 1 byte for checksum = 6 total bytes
     if (len != 6) {
         return -1; // error in message length
@@ -92,8 +93,8 @@ int parse_dual_current(char* msg, int len, float& i0, float& i1) {
         // check if the check sum matched
         if (checkSum == rcvdCheckSum) {
             // convert to float
-            i0 = (float) ((int16_t) i0_16);
-            i1 = (float) ((int16_t) i1_16);
+            i0 = (float) ((int16_t) i0_16) / MULTIPLIER;
+            i1 = (float) ((int16_t) i1_16) / MULTIPLIER;
             return 1;
         } else {
             return -1;
