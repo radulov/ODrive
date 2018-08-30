@@ -149,12 +149,12 @@ int parse_coupled_command(char* msg, int len,
         // check if the computed check sum matches the received checksum
         if (checkSum == rcvdCheckSum) {
             // convert to float
-            sp_theta = (int16_t)(sp_theta_16) / POS_MULTIPLIER;
-            kp_theta = (int16_t)(kp_theta_16) / GAIN_MULTIPLIER;
-            kd_theta = (int16_t)(kd_theta_16) / GAIN_MULTIPLIER;
-            sp_gamma = (int16_t)(sp_gamma_16) / POS_MULTIPLIER;
-            kp_gamma = (int16_t)(kp_gamma_16) / GAIN_MULTIPLIER;
-            kd_gamma = (int16_t)(kd_gamma_16) / GAIN_MULTIPLIER;
+            sp_theta = (float)((int16_t)(sp_theta_16) / POS_MULTIPLIER);
+            kp_theta = (float)((int16_t)(kp_theta_16) / GAIN_MULTIPLIER);
+            kd_theta = (float)((int16_t)(kd_theta_16) / GAIN_MULTIPLIER);
+            sp_gamma = (float)((int16_t)(sp_gamma_16) / POS_MULTIPLIER);
+            kp_gamma = (float)((int16_t)(kp_gamma_16) / GAIN_MULTIPLIER);
+            kd_gamma = (float)((int16_t)(kd_gamma_16) / GAIN_MULTIPLIER);
             return 1;
         } else {
             return -1;
