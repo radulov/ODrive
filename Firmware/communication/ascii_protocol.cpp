@@ -13,7 +13,7 @@
 #include "ascii_protocol.hpp"
 #include <utils.h>
 #include <fibre/cpp_utils.hpp>
-
+#include "controller.hpp"
 /* Private macros ------------------------------------------------------------*/
 /* Private typedef -----------------------------------------------------------*/
 /* Global constant data ------------------------------------------------------*/
@@ -172,26 +172,41 @@ void send_motor_positions(StreamSink& response_channel) {
     // Cast the positions in counts as 2-byte shorts, it's ok to chop
     // the decimal part of the position off since we only have accuracy
     // to 1 count anyways
-    float m0_fl = constrain(axes[0]->encoder_.pos_estimate_, -30000.0, 30000.0);
-    float m1_fl = constrain(axes[1]->encoder_.pos_estimate_, -30000.0, 30000.0);
+    float m0_fl = axes[0]->encoder_.pos_estimate_;
+    float m1_fl = axes[1]->encoder_.pos_estimate_;
 
-    int16_t m0_16 = (int16_t) m0_fl;
-    int16_t m1_16 = (int16_t) m1_fl;
+    //motor angles in radians... reallly shows angle of each upper leg relative to horizontal
+    float alpha = encoder_to_rad(m0_fl) + M_PI/2.0f;
+    float beta = encoder_to_rad(m1_fl) - M_PI/2.0f;
+
+    // Constrain the alpha and beta angles to +- 30 radians (+- 5 rotations)
+    // NOTE: Think about the consequences of sending inaccurate angles once the limits are hit
+    alpha = constrain(alpha, -30.0f, 30.0f);
+    beta = constrain(beta, -30.0f, 30.0f);
+
+    float MULTIPLIER = 1000.0f;
+
+    int16_t gamma_16 = (int16_t) ((alpha/2.0f - beta/2.0f) * MULTIPLIER);
+    int16_t theta_16 = (int16_t) ((alpha/2.0f + beta/2.0f) * MULTIPLIER);
+    //m0_fl and m1_fl are motor counts... but from where do they start?
+    //1. motor count = 1/3 leg motor count
+    //int16_t m0_16 = encoder_to(int16_t) m0_fl;
+    //int16_t m1_16 = (int16_t) m1_fl;
 
     // compute xor checksum (whoa look at me go)
     uint8_t check_sum = 'P';
-    check_sum ^= (m0_16) & 0xFF;
-    check_sum ^= (m0_16 >> 8) & 0xFF;
-    check_sum ^= (m1_16) & 0xFF;
-    check_sum ^= (m1_16 >> 8) & 0xFF;
+    check_sum ^= (theta_16) & 0xFF;
+    check_sum ^= (theta_16 >> 8) & 0xFF;
+    check_sum ^= (gamma_16) & 0xFF;
+    check_sum ^= (gamma_16 >> 8) & 0xFF;
 
     static uint8_t start_byte = 1;
     static uint8_t len_byte = 6;
     response_channel.process_bytes((uint8_t*) &start_byte,   1, nullptr);
     response_channel.process_bytes((uint8_t*) &len_byte,     1, nullptr);
     response_channel.process_bytes((uint8_t*) "P",           1, nullptr);
-    response_channel.process_bytes((uint8_t*) &m0_16,        2, nullptr);
-    response_channel.process_bytes((uint8_t*) &m1_16,        2, nullptr);
+    response_channel.process_bytes((uint8_t*) &theta_16,        2, nullptr);
+    response_channel.process_bytes((uint8_t*) &gamma_16,        2, nullptr);
     response_channel.process_bytes((uint8_t*) &check_sum,    1, nullptr);
 }
 
@@ -299,6 +314,8 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             
             axes[1]->controller_.set_coupled_setpoints(sp_theta, sp_gamma);
             axes[1]->controller_.set_coupled_gains(kp_theta, kd_theta, kp_gamma, kd_gamma);
+
+            send_motor_positions(response_channel);
         }
     } else if (cmd[0] == 'h') {  // Help
         respond(response_channel, use_checksum, "Please see documentation for more details");
