@@ -118,13 +118,13 @@ int parse_dual_current(char* msg, int len, float& i0, float& i1) {
 
 * @return      int:    1 if success, -1 if failed to find get full message or checksum failed
 */
-int parse_coupled_command(char* msg, int len, 
-                        float& sp_theta, float& kp_theta, float& kd_theta, 
+int parse_coupled_command(char* msg, int len,
+                        float& sp_theta, float& kp_theta, float& kd_theta,
                         float& sp_gamma, float& kp_gamma, float& kd_gamma) {
     // Set multipliers:
-    const float POS_MULTIPLIER = 1000.0f; 
-    // ^ gives 1 encoder count precision in commanding set points. Receivable range is -32.767 to 32.767 radians.    
-    const float GAIN_MULTIPLIER = 100.0f; 
+    const float POS_MULTIPLIER = 1000.0f;
+    // ^ gives 1 encoder count precision in commanding set points. Receivable range is -32.767 to 32.767 radians.
+    const float GAIN_MULTIPLIER = 100.0f;
     // ^ gives 0.01 precision in setting gains. Receivable range is -327.67 to 327.67.
 
     // Message: 1 byte for 'S', 12 bytes for values, 1 byte for checksum = 14 total bytes
@@ -143,7 +143,7 @@ int parse_coupled_command(char* msg, int len,
         // compute checksum, including the 'S'
         uint8_t checkSum = 0;
         for(int i = 0; i < len-1; i++) {
-            checkSum ^= msg[i]; 
+            checkSum ^= msg[i];
         }
 
         // check if the computed check sum matches the received checksum
@@ -160,7 +160,7 @@ int parse_coupled_command(char* msg, int len,
             return -1;
         }
     }
-    return 1;    
+    return 1;
 }
 
 void send_motor_positions(StreamSink& response_channel) {
@@ -176,8 +176,8 @@ void send_motor_positions(StreamSink& response_channel) {
     float m1_fl = axes[1]->encoder_.pos_estimate_;
 
     //motor angles in radians... reallly shows angle of each upper leg relative to horizontal
-    float alpha = encoder_to_rad(m0_fl) + M_PI/2.0f;
-    float beta = encoder_to_rad(m1_fl) - M_PI/2.0f;
+    float alpha = axes[0]->controller_.encoder_to_rad(m0_fl) + M_PI/2.0f;
+    float beta = axes[1]->controller_.encoder_to_rad(m1_fl) - M_PI/2.0f;
 
     // Constrain the alpha and beta angles to +- 30 radians (+- 5 rotations)
     // NOTE: Think about the consequences of sending inaccurate angles once the limits are hit
@@ -311,7 +311,7 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         } else {
             axes[0]->controller_.set_coupled_setpoints(sp_theta, sp_gamma);
             axes[0]->controller_.set_coupled_gains(kp_theta, kd_theta, kp_gamma, kd_gamma);
-            
+
             axes[1]->controller_.set_coupled_setpoints(sp_theta, sp_gamma);
             axes[1]->controller_.set_coupled_gains(kp_theta, kd_theta, kp_gamma, kd_gamma);
 
