@@ -298,6 +298,8 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         } else {
             axes[0]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
             axes[1]->controller_.set_coupled_setpoints(theta_sp, gamma_sp);
+
+            send_motor_positions(response_channel);
         }
     } else if (cmd[0] == 'S') { // coupled control with gains
         float sp_theta, kp_theta, kd_theta;
