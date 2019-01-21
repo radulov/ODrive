@@ -67,6 +67,26 @@ void Controller::set_coupled_gains(float kp_theta, float kd_theta, float kp_gamm
 #endif
 }
 
+void set_xy_setpoints(float x_setpoint, float y_setpoint) {
+  x_setpoint_ = x_setpoint;
+  y_setpoint_ = y_setpoint;
+  config_.control_mode = CTRL_MODE_XY_CONTROL;
+#ifdef DEBUG_PRINT
+    printf("XY_CONTROL %3.3f %3.3f\n", x_setpoint_, y_setpoint_);
+#endif
+}
+
+void set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y) {
+  config_.kp_x = kp_x;
+  config_.kd_x = kd_x;
+  config_.kp_y = kp_y;
+  config_.kd_y = kd_y;
+  config_.control_mode = CTRL_MODE_XY_CONTROL;
+  #ifdef DEBUG_PRINT
+    printf("XY_CONTROL %3.3f %3.3f %3.3f %3.3f\n", kp_x, kd_x, kp_y, kd_y);
+  #endif
+}
+
 float Controller::encoder_to_rad(float x) {
     return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2.0f * M_PI;
 }
@@ -148,6 +168,73 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
         axes[1]->controller_.current_setpoint_ = tau_theta*0.5f - tau_gamma*0.5f;
 
         Iq = current_setpoint_;
+    } else if(config_.control_mode == CTRL_MODE_XY_CONTROL) { //change condition for now...
+///////////////////////////////////////////////////////////////////////////////////
+//current theta, gamma
+        float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) + M_PI/2.0f;
+        float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) - M_PI/2.0f; // Assumes legs started 180 apart
+        float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
+        float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
+
+        float theta = alpha/2.0f + beta/2.0f;
+        float gamma = alpha/2.0f - beta/2.0f;
+        float d_theta = d_alpha/2.0f + d_beta/2.0f;
+        float d_gamma = d_alpha/2.0f - d_beta/2.0f;
+
+        // jacobian stuff
+        float dradius_dgamma = -L1*sin(gamma) - (L1*cos(gamma))/(sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma))); // careful when this is 0
+        float dx_dtheta = -L*sin(theta);
+        float dy_dtheta = L*cos(theta);
+        float dx_dradius = cos(theta);
+        float dy_dradius = sin(theta);
+
+        float jacobian[2][2] = {
+                                  {dx_dtheta, dx_dradius*dradius_dgamma},
+                                  {dy_dtheta, dy_dradius*dradius_dgamma},
+                                };
+        //leg parameters
+        float L1 = 0.09; // upper leg length (m)
+        float L2 = 0.162; // lower leg length (m)
+        float L = L1*cos(gamma) + sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma));
+
+        //current x, y
+        float x = L * sin(theta); //How to get leg_direction here?
+        float y = L * cos(theta);
+        float d_x = jacobian[0][1]*d_gamma + jacobian[0][0]*d_theta; //derivative of x wrt time
+        float d_y = jacobian[1][1]*d_gamma + jacobian[1][0]*d_theta;
+
+        //x, y setpoints set manually here if doing x compliance, y setpoint should be same as curr y
+        // and vice versa.
+        float x_sp = x_setpoint_; //make x set point 0
+        float y_sp = y_setpoint_; //
+
+        //gains wanted for x and y
+        //when doing x compliance, set y kp's and kd's to 0... no desire to move in those directions
+        float kp_x = config_.kp_x;
+        float kp_y = config_.kp_y;
+        float kd_x = config_.kd_x;
+        float kd_y = config_.kd_y;
+
+        float p_term_x = kp_x * (x_sp - x);
+        float d_term_x = kd_x * (0.0f - d_x);
+
+        float p_term_y = kp_y * (y_sp - y);
+        float d_term_y = kd_y * (0.0f - d_y);
+
+        float force_x = p_term_x + d_term_x;
+        float force_y = p_term_y + d_term_y;
+
+        float tau_theta = force_x * jacobian[0][0] + force_y * jacobian[1][0]; //mutliplying by jacobian transpose
+        float tau_gamma = force_x * jacobian[0][1] + force_y * jacobian[1][1];
+
+        axes[0]->controller_.current_setpoint_ = tau_theta*0.5f + tau_gamma*0.5f;
+        axes[1]->controller_.current_setpoint_ = tau_theta*0.5f - tau_gamma*0.5f;
+
+        Iq = current_setpoint_;
+
+///////////////////////////////////////////////////////////////////////////////////
+
+
     }
 
     // Anti-cogging is enabled after calibration

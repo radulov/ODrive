@@ -12,7 +12,8 @@ typedef enum {
     CTRL_MODE_CURRENT_CONTROL = 1,
     CTRL_MODE_VELOCITY_CONTROL = 2,
     CTRL_MODE_POSITION_CONTROL = 3,
-    CTRL_MODE_COUPLED_CONTROL = 4
+    CTRL_MODE_COUPLED_CONTROL = 4,
+    CTRL_MODE_XY_CONTROL = 5
 } Motor_control_mode_t;
 
 struct ControllerConfig_t {
@@ -28,6 +29,11 @@ struct ControllerConfig_t {
     float kp_gamma = 0.01f * 6000.0f / (2.0f * M_PI);
     float kd_gamma = 5.0f / 10000.0f * 6000.0f / (2.0f * M_PI);
 
+    float kp_x = 0;
+    float kd_x = 0;
+    float kp_y = 0;
+    float kd_y = 0;
+
     float gear_ratio = 3.0;
 };
 
@@ -41,6 +47,8 @@ public:
     void set_current_setpoint(float current_setpoint);
     void set_coupled_setpoints(float theta_setpoint, float gamma_setpoint);
     void set_coupled_gains(float kp_theta, float kd_theta, float kp_gamma, float kd_gamma);
+    void set_xy_setpoints(float x_setpoint, float y_setpoint);
+    void set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y);
 
     float encoder_to_rad(float x);
 
@@ -85,6 +93,9 @@ public:
 
     float theta_setpoint_ = 0.0f;
     float gamma_setpoint_ = M_PI/2.0f;
+
+    float x_setpoint_ = 0.0f;
+    float y_setpoint_ = 0.1f;
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
