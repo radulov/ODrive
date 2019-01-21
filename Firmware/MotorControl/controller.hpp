@@ -95,7 +95,7 @@ public:
     float gamma_setpoint_ = M_PI/2.0f;
 
     float x_setpoint_ = 0.0f;
-    float y_setpoint_ = 0.1f;
+    float y_setpoint_ = 0.15f;
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
@@ -106,6 +106,9 @@ public:
             make_protocol_property("current_setpoint", &current_setpoint_),
             make_protocol_property("theta_setpoint", &theta_setpoint_),
             make_protocol_property("gamma_setpoint", &gamma_setpoint_),
+            make_protocol_property("x_setpoint", &x_setpoint_),
+            make_protocol_property("y_setpoint", &y_setpoint_),
+
             make_protocol_object("config",
                 make_protocol_property("control_mode", &config_.control_mode),
                 make_protocol_property("pos_gain", &config_.pos_gain),
@@ -115,7 +118,11 @@ public:
                 make_protocol_property("kp_theta", &config_.kp_theta),
                 make_protocol_property("kd_theta", &config_.kd_theta),
                 make_protocol_property("kp_gamma", &config_.kp_gamma),
-                make_protocol_property("kd_gamma", &config_.kd_gamma)
+                make_protocol_property("kd_gamma", &config_.kd_gamma),
+                make_protocol_property("kp_x", &config_.kp_x),
+                make_protocol_property("kd_x", &config_.kd_x),
+                make_protocol_property("kp_y", &config_.kp_y),
+                make_protocol_property("kd_y", &config_.kd_y)
             ),
             make_protocol_function("set_pos_setpoint", *this, &Controller::set_pos_setpoint,
                 "pos_setpoint",

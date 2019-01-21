@@ -67,7 +67,7 @@ void Controller::set_coupled_gains(float kp_theta, float kd_theta, float kp_gamm
 #endif
 }
 
-void set_xy_setpoints(float x_setpoint, float y_setpoint) {
+void Controller::set_xy_setpoints(float x_setpoint, float y_setpoint) {
   x_setpoint_ = x_setpoint;
   y_setpoint_ = y_setpoint;
   config_.control_mode = CTRL_MODE_XY_CONTROL;
@@ -76,7 +76,7 @@ void set_xy_setpoints(float x_setpoint, float y_setpoint) {
 #endif
 }
 
-void set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y) {
+void Controller::set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y) {
   config_.kp_x = kp_x;
   config_.kd_x = kd_x;
   config_.kp_y = kp_y;
@@ -181,6 +181,11 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
         float d_theta = d_alpha/2.0f + d_beta/2.0f;
         float d_gamma = d_alpha/2.0f - d_beta/2.0f;
 
+        //leg parameters
+        float L1 = 0.09f; // upper leg length (m)
+        float L2 = 0.162f; // lower leg length (m)
+        float L = L1*cos(gamma) + sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma));
+
         // jacobian stuff
         float dradius_dgamma = -L1*sin(gamma) - (L1*cos(gamma))/(sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma))); // careful when this is 0
         float dx_dtheta = -L*sin(theta);
@@ -192,10 +197,7 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
                                   {dx_dtheta, dx_dradius*dradius_dgamma},
                                   {dy_dtheta, dy_dradius*dradius_dgamma},
                                 };
-        //leg parameters
-        float L1 = 0.09; // upper leg length (m)
-        float L2 = 0.162; // lower leg length (m)
-        float L = L1*cos(gamma) + sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma));
+        
 
         //current x, y
         float x = L * sin(theta); //How to get leg_direction here?
