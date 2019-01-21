@@ -67,7 +67,7 @@ void Controller::set_coupled_gains(float kp_theta, float kd_theta, float kp_gamm
 #endif
 }
 
-void set_xy_setpoints(float x_setpoint, float y_setpoint) {
+void Controller::set_xy_setpoints(float x_setpoint, float y_setpoint) {
   x_setpoint_ = x_setpoint;
   y_setpoint_ = y_setpoint;
   config_.control_mode = CTRL_MODE_XY_CONTROL;
@@ -76,7 +76,7 @@ void set_xy_setpoints(float x_setpoint, float y_setpoint) {
 #endif
 }
 
-void set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y) {
+void Controller::set_xy_gains(float kp_x, float kd_x, float kp_y, float kd_y) {
   config_.kp_x = kp_x;
   config_.kd_x = kd_x;
   config_.kp_y = kp_y;
