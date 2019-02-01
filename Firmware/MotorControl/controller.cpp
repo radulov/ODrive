@@ -187,17 +187,17 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
         float L = L1*cos(gamma) + sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma));
 
         // jacobian stuff
-        float dradius_dgamma = -L1*sin(gamma) - (L1*cos(gamma))/(sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma))); // careful when this is 0
-        float dx_dtheta = -L*sin(theta);
-        float dy_dtheta = L*cos(theta);
-        float dx_dradius = cos(theta);
-        float dy_dradius = sin(theta);
+        float dradius_dgamma = -L1*sin(gamma) - (L1*L1*sin(gamma)*cos(gamma))/(sqrt(L2*L2 - L1*L1*sin(gamma)*sin(gamma)));
+        float dx_dtheta = L*cos(theta);
+        float dy_dtheta = -L*sin(theta);
+        float dx_dradius = sin(theta);
+        float dy_dradius = cos(theta);
 
         float jacobian[2][2] = {
                                   {dx_dtheta, dx_dradius*dradius_dgamma},
                                   {dy_dtheta, dy_dradius*dradius_dgamma},
                                 };
-        
+
 
         //current x, y
         float x = L * sin(theta); //How to get leg_direction here?
