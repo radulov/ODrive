@@ -131,7 +131,7 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     anticogging_calibration(pos_estimate, vel_estimate);
 
     // PD control
-    float Iq = 0.0f;
+    float Iq = current_setpoint_;
 
     if (config_.control_mode == CTRL_MODE_POSITION_CONTROL) {
         float pos_err = pos_setpoint_ - pos_estimate;
@@ -198,10 +198,18 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
                                   {dy_dtheta, dy_dradius*dradius_dgamma},
                                 };
 
+        J00 = jacobian[0][0];
+        J01 = jacobian[0][1];
+        J10 = jacobian[1][0];
+        J11 = jacobian[1][1];
 
         //current x, y
         float x = L * sin(theta); //How to get leg_direction here?
         float y = L * cos(theta);
+
+        x_pos_ = x;
+        y_pos_ = y;
+
         float d_x = jacobian[0][1]*d_gamma + jacobian[0][0]*d_theta; //derivative of x wrt time
         float d_y = jacobian[1][1]*d_gamma + jacobian[1][0]*d_theta;
 
@@ -225,9 +233,14 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
         float force_x = p_term_x + d_term_x;
         float force_y = p_term_y + d_term_y;
+        force_x_ = force_x;
+        force_y_ = force_y;
+        
 
         float tau_theta = force_x * jacobian[0][0] + force_y * jacobian[1][0]; //mutliplying by jacobian transpose
         float tau_gamma = force_x * jacobian[0][1] + force_y * jacobian[1][1];
+        tau_theta_ = tau_theta;
+        tau_gamma_ = tau_gamma;
 
         axes[0]->controller_.current_setpoint_ = tau_theta*0.5f + tau_gamma*0.5f;
         axes[1]->controller_.current_setpoint_ = tau_theta*0.5f - tau_gamma*0.5f;

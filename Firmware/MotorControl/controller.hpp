@@ -95,7 +95,18 @@ public:
     float gamma_setpoint_ = M_PI/2.0f;
 
     float x_setpoint_ = 0.0f;
-    float y_setpoint_ = 0.15f;
+    float y_setpoint_ = 0.13f;
+
+    float force_x_ = 0;
+    float force_y_ = 0;
+
+    float x_pos_ = 0;
+    float y_pos_ = 0;
+
+    float tau_theta_ = 0;
+    float tau_gamma_ = 0;
+
+    float J00, J01, J11, J10;
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
@@ -108,6 +119,16 @@ public:
             make_protocol_property("gamma_setpoint", &gamma_setpoint_),
             make_protocol_property("x_setpoint", &x_setpoint_),
             make_protocol_property("y_setpoint", &y_setpoint_),
+            make_protocol_property("force_x", &force_x_),
+            make_protocol_property("force_y", &force_y_),
+            make_protocol_property("x_pos", &x_pos_),
+            make_protocol_property("y_pos", &y_pos_),
+            make_protocol_property("tau_theta", &tau_theta_),
+            make_protocol_property("tau_gamma", &tau_gamma_),
+            make_protocol_property("J00", &J00),
+            make_protocol_property("J01", &J01),
+            make_protocol_property("J10", &J10),
+            make_protocol_property("J11", &J11),
 
             make_protocol_object("config",
                 make_protocol_property("control_mode", &config_.control_mode),
@@ -136,6 +157,14 @@ public:
             make_protocol_function("set_coupled_setpoints", *this, &Controller::set_coupled_setpoints,
                 "theta_setpoint",
                 "gamma_setpoint"),
+            make_protocol_function("set_xy_setpoints", *this, &Controller::set_xy_setpoints,
+                "x_setpoint",
+                "y_setpoint"),
+                make_protocol_function("set_xy_gains", *this, &Controller::set_xy_gains,
+                "kp_x",
+                "kd_x",
+                "kp_y",
+                "kd_y"),
             make_protocol_function("start_anticogging_calibration", *this, &Controller::start_anticogging_calibration)
         );
     }
