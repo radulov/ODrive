@@ -246,12 +246,7 @@ def main(app_shutdown_token):
 
     WARNING: Saving more than twice per boot will cause a reversion of all changes
     """
-    #full_calibration(app_shutdown_token)
     bare_bones_calibration(app_shutdown_token, reset=False)
-
-
-    # set_odrive_gains(odrv0)
-    # test_odrive_motors(odrv0)
 
 import odrive
 from fibre import Logger, Event
