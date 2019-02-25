@@ -19,9 +19,15 @@ def set_gains(odrv,axis):
     Sets the nested PID gains to a good default
     """
     axis.controller.config.pos_gain = 100.0 #f [(counts/s) / counts]
+    axis.controller.config.pos_gain = 0.01 #f [(counts/s) / counts]
     axis.controller.config.vel_gain = 5.0 / 10000.0 #[A/(counts/s)]
-    axis.controller.config.vel_limit = 50000.0;
+    axis.controller.config.vel_limit = 50000.0
     axis.controller.config.vel_integrator_gain = 0 #[A/((counts/s) * s)]
+
+    axis.controller.config.kp_theta = 0.04 *  6000 / (2 * math.pi)
+    axis.controller.config.kd_theta = 5.0 / 10000.0 *  6000 / (2 * math.pi)
+    axis.controller.config.kp_gamma = 0.0 *  6000 / (2 * math.pi)
+    axis.controller.config.kd_gamma = 5.0 / 10000.0 *  6000 / (2 * math.pi)
 
 def calibrate_motor(odrv, axis):
     # time.sleep(0.5)
@@ -93,8 +99,11 @@ def init_odrive(odrv):
     print('Initializing ODrive...')
     odrv.config.brake_resistance = 0
 
-    odrv.axis0.motor.config.pole_pairs = 11
-    odrv.axis1.motor.config.pole_pairs = 11
+    odrv.axis0.motor.config.pole_pairs = 21
+    odrv.axis1.motor.config.pole_pairs = 21
+
+    odrv.axis0.motor.config.resistance_calib_max_voltage = 4.0
+    odrv.axis1.motor.config.resistance_calib_max_voltage = 4.0
 
     odrv.axis0.encoder.config.cpr = 2000
     odrv.axis1.encoder.config.cpr = 2000
@@ -181,7 +190,7 @@ def print_configs(odrv0):
     print('\n')
     print(odrv0.axis1.config)
 
-def full_calibration(odrv, app_shutdown_token):
+def full_calibration(app_shutdown_token):
     """
     Reset the odrive and calibrate everything:
     1) Gains and limits
@@ -202,8 +211,10 @@ def full_calibration(odrv, app_shutdown_token):
 
     odrv0.save_configuration()
 
-    run_state(axis=odrv0.axis0, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
-    run_state(axis=odrv0.axis1, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #run_state(axis=odrv0.axis0, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #run_state(axis=odrv0.axis1, requested_state=AXIS_STATE_CLOSED_LOOP_CONTROL, wait=False);
+    #odrv0.axis0.controller.pos_setpoint = 0;
+    #odrv0.axis1.controller.pos_setpoint = 0;
 
     print_configs(odrv0)
 
@@ -240,12 +251,7 @@ def main(app_shutdown_token):
 
     WARNING: Saving more than twice per boot will cause a reversion of all changes
     """
-    # full_calibration(odrv0,app_shutdown_token)
     bare_bones_calibration(app_shutdown_token, reset=False)
-
-
-    # set_odrive_gains(odrv0)
-    # test_odrive_motors(odrv0)
 
 import odrive
 from fibre import Logger, Event
