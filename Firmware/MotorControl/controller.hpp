@@ -110,7 +110,7 @@ public:
     float tau_theta_ = 0;
     float tau_gamma_ = 0;
 
-    float J00, J01, J11, J10;
+    float J00=0.0f; float J01=0.0f; float J11=0.0f; float J10=0.0f;
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
