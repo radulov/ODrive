@@ -97,8 +97,11 @@ def init_odrive(odrv):
     print('Initializing ODrive...')
     odrv.config.brake_resistance = 0
 
-    odrv.axis0.motor.config.pole_pairs = 11
-    odrv.axis1.motor.config.pole_pairs = 11
+    odrv.axis0.motor.config.pole_pairs = 21
+    odrv.axis1.motor.config.pole_pairs = 21
+
+    odrv.axis0.motor.config.resistance_calib_max_voltage = 4.0
+    odrv.axis1.motor.config.resistance_calib_max_voltage = 4.0
 
     odrv.axis0.encoder.config.cpr = 2000
     odrv.axis1.encoder.config.cpr = 2000

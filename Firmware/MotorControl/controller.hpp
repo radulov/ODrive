@@ -34,7 +34,7 @@ struct ControllerConfig_t {
     float kp_y = 0;
     float kd_y = 0;
 
-    float gear_ratio = 3.0;
+    float gear_ratio = 4.0;
 };
 
 class Controller {
@@ -87,6 +87,10 @@ public:
     // variables exposed on protocol
     float pos_setpoint_ = 0.0f;
     float vel_setpoint_ = 0.0f;
+
+    float theta_ = 0.0f;
+    float gamma_ = 1.57f;
+
     // float vel_setpoint = 800.0f; <sensorless example>
     float vel_integrator_current_ = 0.0f;  // [A]
     float current_setpoint_ = 0.0f;        // [A]
@@ -129,6 +133,8 @@ public:
             make_protocol_property("J01", &J01),
             make_protocol_property("J10", &J10),
             make_protocol_property("J11", &J11),
+            make_protocol_property("theta", &theta_),
+            make_protocol_property("gamma", &gamma_),
 
             make_protocol_object("config",
                 make_protocol_property("control_mode", &config_.control_mode),

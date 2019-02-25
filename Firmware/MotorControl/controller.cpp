@@ -152,6 +152,10 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
         float theta = alpha/2.0f + beta/2.0f;
         float gamma = alpha/2.0f - beta/2.0f;
+
+        theta_ = theta;
+        gamma_ = gamma;
+
         float d_theta = d_alpha/2.0f + d_beta/2.0f;
         float d_gamma = d_alpha/2.0f - d_beta/2.0f;
 
@@ -178,6 +182,9 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
         float theta = alpha/2.0f + beta/2.0f;
         float gamma = alpha/2.0f - beta/2.0f;
+        theta_ = theta;
+        gamma_ = gamma;
+
         float d_theta = d_alpha/2.0f + d_beta/2.0f;
         float d_gamma = d_alpha/2.0f - d_beta/2.0f;
 
