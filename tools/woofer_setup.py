@@ -19,15 +19,14 @@ def set_gains(odrv,axis):
     Sets the nested PID gains to a good default
     """
     axis.controller.config.pos_gain = 100.0 #f [(counts/s) / counts]
-    axis.controller.config.pos_gain = 0.01 #f [(counts/s) / counts]
     axis.controller.config.vel_gain = 5.0 / 10000.0 #[A/(counts/s)]
     axis.controller.config.vel_limit = 50000.0
     axis.controller.config.vel_integrator_gain = 0 #[A/((counts/s) * s)]
 
-    axis.controller.config.kp_theta = 0.04 *  6000 / (2 * math.pi)
-    axis.controller.config.kd_theta = 5.0 / 10000.0 *  6000 / (2 * math.pi)
-    axis.controller.config.kp_gamma = 0.0 *  6000 / (2 * math.pi)
-    axis.controller.config.kd_gamma = 5.0 / 10000.0 *  6000 / (2 * math.pi)
+    # axis.controller.config.kp_theta = 0.04 *  6000 / (2 * math.pi)
+    # axis.controller.config.kd_theta = 5.0 / 10000.0 *  6000 / (2 * math.pi)
+    # axis.controller.config.kp_gamma = 0.0 *  6000 / (2 * math.pi)
+    # axis.controller.config.kd_gamma = 5.0 / 10000.0 *  6000 / (2 * math.pi)
 
 def calibrate_motor(odrv, axis):
     # time.sleep(0.5)
@@ -108,8 +107,8 @@ def init_odrive(odrv):
     odrv.axis0.encoder.config.cpr = 2000
     odrv.axis1.encoder.config.cpr = 2000
 
-    odrv.axis0.motor.config.current_lim = 40
-    odrv.axis1.motor.config.current_lim = 40
+    odrv.axis0.motor.config.current_lim = 15
+    odrv.axis1.motor.config.current_lim = 15
 
     odrv.axis0.motor.config.calibration_current = 10
     odrv.axis1.motor.config.calibration_current = 10
@@ -120,12 +119,6 @@ def init_odrive(odrv):
     odrv.axis0.encoder.config.pre_calibrated = False
     odrv.axis1.encoder.config.pre_calibrated = False
     print('Done.')
-
-def set_odrive_limits(odrv,axis,cur_lim):
-    """
-    Set motor current limits
-    """
-    axis.motor.config.current_lim = current_lim
 
 def calibrate_odrive(odrv):
     """
@@ -144,22 +137,6 @@ def set_odrive_gains(odrv):
     print('Setting gains...')
     set_gains(odrv,odrv.axis0)
     set_gains(odrv,odrv.axis1)
-    print('Done.')
-
-def test_odrive_motors(odrv):
-    """
-    Give two position commands to both axis
-    """
-    print('Testing motors...')
-    odrv.axis0.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-    odrv.axis1.requested_state = AXIS_STATE_CLOSED_LOOP_CONTROL
-
-    time.sleep(0.5)
-    odrv.axis0.controller.set_pos_setpoint(1000.0, 0.0, 0.0)
-    odrv.axis1.controller.set_pos_setpoint(-1000.0, 0.0, 0.0)
-    time.sleep(1)
-    odrv.axis0.controller.set_pos_setpoint(0.0, 0.0, 0.0)
-    odrv.axis1.controller.set_pos_setpoint(0.0, 0.0, 0.0)
     print('Done.')
 
 def get_odrive(shutdown_token):
