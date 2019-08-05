@@ -137,6 +137,7 @@ public:
             make_protocol_property("gamma", &gamma_),
 
             make_protocol_object("config",
+                make_protocol_property("gear_ratio", &config_.gear_ratio),
                 make_protocol_property("control_mode", &config_.control_mode),
                 make_protocol_property("pos_gain", &config_.pos_gain),
                 make_protocol_property("vel_gain", &config_.vel_gain),
