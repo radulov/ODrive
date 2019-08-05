@@ -34,7 +34,7 @@ struct ControllerConfig_t {
     float kp_y = 0;
     float kd_y = 0;
 
-    float gear_ratio = 4.0;
+    float gear_ratio = 3.0;
 };
 
 class Controller {
