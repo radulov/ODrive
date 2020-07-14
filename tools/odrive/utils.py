@@ -66,37 +66,40 @@ def set_motor_thermistor_coeffs(axis, Rload, R_25, Beta, Tmin, TMax):
     axis.motor_thermistor.config.poly_coefficient_2 = float(coeffs[1])
     axis.motor_thermistor.config.poly_coefficient_3 = float(coeffs[0])
 
-def dump_errors(odrv, clear=False):
+def dump_errors(odrv, clear=False, printfunc = print):
     axes = [(name, axis) for name, axis in odrv._remote_attributes.items() if 'axis' in name]
     axes.sort()
+
+    def dump_errors_for_module(indent, name, remote_obj, errorcodes):
+        if (remote_obj.error != 0):
+            printfunc(indent + name + ": " + _VT100Colors['red'] + "Error(s):" + _VT100Colors['default'])
+            for bit in range(64):
+                if remote_obj.error & (1 << bit) != 0:
+                    printfunc(indent + "  " + errorcodes.get((1 << bit), 'UNKNOWN ERROR: 0x{:08X}'.format(1 << bit)))
+            if clear:
+                remote_obj.error = 0
+        else:
+            printfunc(indent + name + ": " + _VT100Colors['green'] + "no error" + _VT100Colors['default'])
+
+    system_error_codes = {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("ODRIVE_ERROR_")}
+    dump_errors_for_module("", "system", odrv, system_error_codes)
+
     for name, axis in axes:
-        print(name)
+        printfunc(name)
 
         # Flatten axis and submodules
         # (name, remote_obj, errorcode)
         module_decode_map = [
-            ('axis', axis, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("AXIS_ERROR_")}),
-            ('motor', axis.motor, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("MOTOR_ERROR_")}),
-            ('fet_thermistor', axis.fet_thermistor, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("THERMISTOR_CURRENT_LIMITER_ERROR")}),
-            ('motor_thermistor', axis.motor_thermistor, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("THERMISTOR_CURRENT_LIMITER_ERROR")}),
-            ('encoder', axis.encoder, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("ENCODER_ERROR_")}),
-            ('controller', axis.controller, {k: v for k, v in odrive.enums.__dict__ .items() if k.startswith("CONTROLLER_ERROR_")}),
+            ('axis', axis, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("AXIS_ERROR_")}),
+            ('motor', axis.motor, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("MOTOR_ERROR_")}),
+            ('fet_thermistor', axis.fet_thermistor, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("THERMISTOR_CURRENT_LIMITER_ERROR")}),
+            ('motor_thermistor', axis.motor_thermistor, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("THERMISTOR_CURRENT_LIMITER_ERROR")}),
+            ('encoder', axis.encoder, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("ENCODER_ERROR_")}),
+            ('controller', axis.controller, {v: k for k, v in odrive.enums.__dict__ .items() if k.startswith("CONTROLLER_ERROR_")}),
         ]
 
-        # Module error decode
         for name, remote_obj, errorcodes in module_decode_map:
-            prefix = ' '*2 + name + ": "
-            if (remote_obj.error != 0):
-                foundError = False
-                print(prefix + _VT100Colors['red'] + "Error(s):" + _VT100Colors['default'])
-                errorcodes_dict = {val: name for name, val in errorcodes.items() if 'ERROR_' in name}
-                for bit in range(64):
-                    if remote_obj.error & (1 << bit) != 0:
-                        print("    " + errorcodes_dict.get((1 << bit), 'UNKNOWN ERROR: 0x{:08X}'.format(1 << bit)))
-                if clear:
-                    remote_obj.error = 0
-            else:
-                print(prefix + _VT100Colors['green'] + "no error" + _VT100Colors['default'])
+            dump_errors_for_module("  ", name, remote_obj, errorcodes)
 
 def oscilloscope_dump(odrv, num_vals, filename='oscilloscope.csv'):
     with open(filename, 'w') as f:
