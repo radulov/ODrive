@@ -31,6 +31,14 @@ elseif boardversion == "v3.5-48V" then
     boarddir = 'Board/v3'
     FLAGS += "-DHW_VERSION_MAJOR=3 -DHW_VERSION_MINOR=5"
     FLAGS += "-DHW_VERSION_VOLTAGE=48"
+elseif boardversion == "v3.6-24V" then
+    boarddir = 'Board/v3'
+    FLAGS += "-DHW_VERSION_MAJOR=3 -DHW_VERSION_MINOR=6"
+    FLAGS += "-DHW_VERSION_VOLTAGE=24"
+elseif boardversion == "v3.6-56V" then
+    boarddir = 'Board/v3'
+    FLAGS += "-DHW_VERSION_MAJOR=3 -DHW_VERSION_MINOR=6"
+    FLAGS += "-DHW_VERSION_VOLTAGE=56"
 elseif boardversion == "" then
     error("board version not specified - take a look at tup.config.default")
 else
@@ -89,11 +97,7 @@ FLAGS += '-mthumb'
 FLAGS += '-mcpu=cortex-m4'
 FLAGS += '-mfpu=fpv4-sp-d16'
 FLAGS += '-mfloat-abi=hard'
-FLAGS += { '-Wall', '-Wfloat-conversion', '-fdata-sections', '-ffunction-sections'}
-
--- debug build
-FLAGS += '-g -gdwarf-2'
-
+FLAGS += { '-Wall', '-Wdouble-promotion', '-Wfloat-conversion', '-fdata-sections', '-ffunction-sections'}
 
 -- linker flags
 LDFLAGS += '-T'..boarddir..'/STM32F405RGTx_FLASH.ld'
@@ -102,9 +106,15 @@ LDFLAGS += '-lc -lm -lnosys -larm_cortexM4lf_math' -- libs
 LDFLAGS += '-mthumb -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -specs=nosys.specs -specs=nano.specs -u _printf_float -u _scanf_float -Wl,--cref -Wl,--gc-sections'
 LDFLAGS += '-Wl,--undefined=uxTopUsedPriority'
 
+-- debug build
+if tup.getconfig("DEBUG") == "true" then
+    FLAGS += '-g -gdwarf-2'
+    OPT += '-Og'
+else
+    OPT += '-O2'
+end
 
 -- common flags for ASM, C and C++
-OPT += '-Og'
 OPT += '-ffast-math -fno-finite-math-only'
 tup.append_table(FLAGS, OPT)
 tup.append_table(LDFLAGS, OPT)
@@ -148,6 +158,8 @@ build{
     sources={
         'Drivers/DRV8301/drv8301.c',
         'MotorControl/utils.c',
+        'MotorControl/arm_sin_f32.c',
+        'MotorControl/arm_cos_f32.c',
         'MotorControl/low_level.cpp',
         'MotorControl/nvm.c',
         'MotorControl/axis.cpp',
@@ -155,6 +167,7 @@ build{
         'MotorControl/encoder.cpp',
         'MotorControl/controller.cpp',
         'MotorControl/sensorless_estimator.cpp',
+        'MotorControl/trapTraj.cpp',
         'MotorControl/main.cpp',
         'communication/communication.cpp',
         'communication/ascii_protocol.cpp',

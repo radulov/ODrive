@@ -2,7 +2,7 @@
 #include "odrive_main.h"
 
 
-Controller::Controller(ControllerConfig_t& config) :
+Controller::Controller(Config_t& config) :
     config_(config)
 {}
 
@@ -11,6 +11,11 @@ void Controller::reset() {
     vel_setpoint_ = 0.0f;
     vel_integrator_current_ = 0.0f;
     current_setpoint_ = 0.0f;
+}
+
+void Controller::set_error(Error_t error) {
+    error_ |= error;
+    axis_->error_ |= Axis::ERROR_CONTROLLER_FAILED;
 }
 
 //--------------------------------
@@ -91,6 +96,24 @@ float Controller::encoder_to_rad(float x) {
     return x / (axis_->encoder_.config_.cpr * config_.gear_ratio) * 2.0f * M_PI;
 }
 
+void Controller::move_to_pos(float goal_point) {
+    axis_->trap_.planTrapezoidal(goal_point, pos_setpoint_, vel_setpoint_,
+                                 axis_->trap_.config_.vel_limit,
+                                 axis_->trap_.config_.accel_limit,
+                                 axis_->trap_.config_.decel_limit);
+    traj_start_loop_count_ = axis_->loop_counter_;
+    config_.control_mode = CTRL_MODE_TRAJECTORY_CONTROL;
+    goal_point_ = goal_point;
+}
+
+void Controller::move_incremental(float displacement, bool from_goal_point = true){
+    if(from_goal_point){
+        move_to_pos(goal_point_ + displacement);
+    } else{
+        move_to_pos(pos_setpoint_ + displacement);
+    }
+}
+
 void Controller::start_anticogging_calibration() {
     // Ensure the cogging map was correctly allocated earlier and that the motor is capable of calibrating
     if (anticogging_.cogging_map != NULL && axis_->error_ == Axis::ERROR_NONE) {
@@ -139,6 +162,61 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
         float vel_err = 0 - vel_estimate;
         Iq += config_.vel_gain * vel_err;
+	}
+	
+    float anticogging_pos = pos_estimate;
+
+    // Trajectory control
+    if (config_.control_mode == CTRL_MODE_TRAJECTORY_CONTROL) {
+        // Note: uint32_t loop count delta is OK across overflow
+        // Beware of negative deltas, as they will not be well behaved due to uint!
+        float t = (axis_->loop_counter_ - traj_start_loop_count_) * current_meas_period;
+        if (t > axis_->trap_.Tf_) {
+            // Drop into position control mode when done to avoid problems on loop counter delta overflow
+            config_.control_mode = CTRL_MODE_POSITION_CONTROL;
+            // pos_setpoint already set by trajectory
+            vel_setpoint_ = 0.0f;
+            current_setpoint_ = 0.0f;
+        } else {
+            TrapezoidalTrajectory::Step_t traj_step = axis_->trap_.eval(t);
+            pos_setpoint_ = traj_step.Y;
+            vel_setpoint_ = traj_step.Yd;
+            current_setpoint_ = traj_step.Ydd * axis_->trap_.config_.A_per_css;
+        }
+        anticogging_pos = pos_setpoint_; // FF the position setpoint instead of the pos_estimate
+    }
+
+    // Ramp rate limited velocity setpoint
+    if (config_.control_mode == CTRL_MODE_VELOCITY_CONTROL && vel_ramp_enable_) {
+        float max_step_size = current_meas_period * config_.vel_ramp_rate;
+        float full_step = vel_ramp_target_ - vel_setpoint_;
+        float step;
+        if (fabsf(full_step) > max_step_size) {
+            step = std::copysignf(max_step_size, full_step);
+        } else {
+            step = full_step;
+        }
+        vel_setpoint_ += step;
+    }
+
+    // Position control
+    // TODO Decide if we want to use encoder or pll position here
+    float vel_des = vel_setpoint_;
+    if (config_.control_mode >= CTRL_MODE_POSITION_CONTROL) {
+        float pos_err;
+        if (config_.setpoints_in_cpr) {
+            // TODO this breaks the semantics that estimates come in on the arguments.
+            // It's probably better to call a get_estimate that will arbitrate (enc vs sensorless) instead.
+            float cpr = (float)(axis_->encoder_.config_.cpr);
+            // Keep pos setpoint from drifting
+            pos_setpoint_ = fmodf_pos(pos_setpoint_, cpr);
+            // Circular delta
+            pos_err = pos_setpoint_ - axis_->encoder_.pos_cpr_;
+            pos_err = wrap_pm(pos_err, 0.5f * cpr);
+        } else {
+            pos_err = pos_setpoint_ - pos_estimate;
+        }
+        vel_des += config_.pos_gain * pos_err;
     }
 
     // Coupled PD control
@@ -147,8 +225,8 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
     if (config_.control_mode == CTRL_MODE_COUPLED_CONTROL) {
         float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) + M_PI/2.0f;
         float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) - M_PI/2.0f; // Assumes legs started 180 apart
-        float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
-        float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
+        float d_alpha = encoder_to_rad(axes[0]->encoder_.vel_estimate_);
+        float d_beta = encoder_to_rad(axes[1]->encoder_.vel_estimate_);
 
         float theta = alpha/2.0f + beta/2.0f;
         float gamma = alpha/2.0f - beta/2.0f;
@@ -177,8 +255,8 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 //current theta, gamma
         float alpha = encoder_to_rad(axes[0]->encoder_.pos_estimate_) + M_PI/2.0f;
         float beta = encoder_to_rad(axes[1]->encoder_.pos_estimate_) - M_PI/2.0f; // Assumes legs started 180 apart
-        float d_alpha = encoder_to_rad(axes[0]->encoder_.pll_vel_);
-        float d_beta = encoder_to_rad(axes[1]->encoder_.pll_vel_);
+        float d_alpha = encoder_to_rad(axes[0]->encoder_.vel_estimate_);
+        float d_beta = encoder_to_rad(axes[1]->encoder_.vel_estimate_);
 
         float theta = alpha/2.0f + beta/2.0f;
         float gamma = alpha/2.0f - beta/2.0f;
@@ -258,17 +336,25 @@ bool Controller::update(float pos_estimate, float vel_estimate, float* current_s
 
 
     }
+	float vel_lim = config_.vel_limit;
+    // Check for overspeed fault (done in this module (controller) for cohesion with vel_lim)
+    if (config_.vel_limit_tolerance > 0.0f) { // 0.0f to disable
+        if (fabsf(vel_estimate) > config_.vel_limit_tolerance * vel_lim) {
+            set_error(ERROR_OVERSPEED);
+            return false;
+        }
+    }
 
     // Anti-cogging is enabled after calibration
     // We get the current position and apply a current feed-forward
     // ensuring that we handle negative encoder positions properly (-1 == motor->encoder.encoder_cpr - 1)
     if (anticogging_.use_anticogging) {
-        Iq += anticogging_.cogging_map[mod(static_cast<int>(pos_estimate), axis_->encoder_.config_.cpr)];
+        Iq += anticogging_.cogging_map[mod(static_cast<int>(anticogging_pos), axis_->encoder_.config_.cpr)];
     }
 
     // Current limiting
-    float Ilim = std::min(axis_->motor_.config_.current_lim, axis_->motor_.current_control_.max_allowed_current);
     bool limited = false;
+    float Ilim = axis_->motor_.effective_current_lim();
     if (Iq > Ilim) {
         limited = true;
         Iq = Ilim;

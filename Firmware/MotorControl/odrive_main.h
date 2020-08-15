@@ -1,7 +1,15 @@
 #ifndef __ODRIVE_MAIN_H
 #define __ODRIVE_MAIN_H
 
+// Note on central include scheme by Samuel:
+// there are circular dependencies between some of the header files,
+// e.g. the Motor header needs a forward declaration of Axis and vice versa
+// so I figured I'd make one main header that takes care of
+// the forward declarations and right ordering
+// btw this pattern is not so uncommon, for instance IIRC the stdlib uses it too
+
 #ifdef __cplusplus
+#include <fibre/protocol.hpp>
 extern "C" {
 #endif
 
@@ -35,9 +43,6 @@ extern bool user_config_loaded_;
 extern uint64_t serial_number;
 extern char serial_number_str[13];
 
-#define ADC_CHANNEL_COUNT 16
-extern uint16_t adc_measurements_[ADC_CHANNEL_COUNT];
-
 typedef struct {
     bool fully_booted;
     uint32_t uptime; // [ms]
@@ -55,6 +60,12 @@ extern SystemStats_t system_stats_;
 #ifdef __cplusplus
 }
 
+struct PWMMapping_t {
+    endpoint_ref_t endpoint = { 0 };
+    float min = 0;
+    float max = 0;
+};
+
 // @brief general user configurable board configuration
 struct BoardConfig_t {
     bool enable_uart = true;
@@ -66,10 +77,12 @@ struct BoardConfig_t {
     float brake_resistance = 0.47f;     // [ohm]
 #endif
     float dc_bus_undervoltage_trip_level = 8.0f;                        //<! [V] minimum voltage below which the motor stops operating
-    float dc_bus_overvoltage_trip_level = 1.08f * HW_VERSION_VOLTAGE;   //<! [V] maximum voltage above which the motor stops operating.
+    float dc_bus_overvoltage_trip_level = 1.07f * HW_VERSION_VOLTAGE;   //<! [V] maximum voltage above which the motor stops operating.
                                                                         //<! This protects against cases in which the power supply fails to dissipate
                                                                         //<! the brake power if the brake resistor is disabled.
                                                                         //<! The default is 26V for the 24V board version and 52V for the 48V board version.
+    PWMMapping_t pwm_mappings[GPIO_COUNT];
+    PWMMapping_t analog_mappings[GPIO_COUNT];
 };
 extern BoardConfig_t board_config;
 extern bool user_config_loaded_;
@@ -98,13 +111,13 @@ inline ENUMTYPE operator ~ (ENUMTYPE a) { return static_cast<ENUMTYPE>(~static_c
 
 
 // ODrive specific includes
-#include <fibre/protocol.hpp>
 #include <utils.h>
 #include <low_level.h>
 #include <encoder.hpp>
 #include <sensorless_estimator.hpp>
 #include <controller.hpp>
 #include <motor.hpp>
+#include <trapTraj.hpp>
 #include <axis.hpp>
 #include <communication/communication.h>
 

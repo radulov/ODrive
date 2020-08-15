@@ -238,8 +238,29 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             }
             if (numscan < 4) {
                 current_feed_forward = 0.0f;
-            }
-            axes[motor_number]->controller_.set_pos_setpoint(pos_setpoint, vel_feed_forward, current_feed_forward);
+			}
+            Axis* axis = axes[motor_number];
+            axis->controller_.set_pos_setpoint(pos_setpoint, vel_feed_forward, current_feed_forward);
+            axis->watchdog_feed();
+        }
+
+    } else if (cmd[0] == 'q') { // position control with limits
+        unsigned motor_number;
+        float pos_setpoint, vel_limit, current_lim;
+        int numscan = sscanf(cmd, "q %u %f %f %f", &motor_number, &pos_setpoint, &vel_limit, &current_lim);
+        if (numscan < 2) {
+            respond(response_channel, use_checksum, "invalid command format");
+        } else if (motor_number >= AXIS_COUNT) {
+            respond(response_channel, use_checksum, "invalid motor %u", motor_number);
+        } else {
+            Axis* axis = axes[motor_number];
+            axis->controller_.pos_setpoint_ = pos_setpoint;
+            if (numscan >= 3)
+                axis->controller_.config_.vel_limit = vel_limit;
+            if (numscan >= 4)
+                axis->motor_.config_.current_lim = current_lim;
+
+            axis->watchdog_feed();
         }
 
     } else if (cmd[0] == 'v') { // velocity control
@@ -252,8 +273,10 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
             respond(response_channel, use_checksum, "invalid motor %u", motor_number);
         } else {
             if (numscan < 3)
-            current_feed_forward = 0.0f;
-            axes[motor_number]->controller_.set_vel_setpoint(vel_setpoint, current_feed_forward);
+                current_feed_forward = 0.0f;
+            Axis* axis = axes[motor_number];
+            axis->controller_.set_vel_setpoint(vel_setpoint, current_feed_forward);
+            axis->watchdog_feed();
         }
     } else if (cmd[0] == 'c') { // current control
         unsigned motor_number;
@@ -264,7 +287,36 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         } else if (motor_number >= AXIS_COUNT) {
             respond(response_channel, use_checksum, "invalid motor %u", motor_number);
         } else {
-            axes[motor_number]->controller_.set_current_setpoint(current_setpoint);
+            Axis* axis = axes[motor_number];
+            axis->controller_.set_current_setpoint(current_setpoint);
+            axis->watchdog_feed();
+        }
+
+    } else if (cmd[0] == 't') { // trapezoidal trajectory
+        unsigned motor_number;
+        float goal_point;
+        int numscan = sscanf(cmd, "t %u %f", &motor_number, &goal_point);
+        if (numscan < 2) {
+            respond(response_channel, use_checksum, "invalid command format");
+        } else if (motor_number >= AXIS_COUNT) {
+            respond(response_channel, use_checksum, "invalid motor %u", motor_number);
+        } else {
+            Axis* axis = axes[motor_number];
+            axis->controller_.move_to_pos(goal_point);
+            axis->watchdog_feed();
+        }
+
+    } else if (cmd[0] == 'f') { // feedback
+        unsigned motor_number;
+        int numscan = sscanf(cmd, "f %u", &motor_number);
+        if (numscan < 1) {
+            respond(response_channel, use_checksum, "invalid command format");
+        } else if (motor_number >= AXIS_COUNT) {
+            respond(response_channel, use_checksum, "invalid motor %u", motor_number);
+        } else {
+            respond(response_channel, use_checksum, "%f %f",
+                    (double)axes[motor_number]->encoder_.pos_estimate_,
+                    (double)axes[motor_number]->encoder_.vel_estimate_);
         }
 
     } else if (cmd[0] == 'C') { // dual current control
@@ -324,6 +376,7 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         respond(response_channel, use_checksum, "");
         respond(response_channel, use_checksum, "Available commands syntax reference:");
         respond(response_channel, use_checksum, "Device Info: i");
+        respond(response_channel, use_checksum, "Position: q axis pos vel-lim I-lim");
         respond(response_channel, use_checksum, "Position: p axis pos vel-ff I-ff");
         respond(response_channel, use_checksum, "Velocity: v axis vel I-ff");
         respond(response_channel, use_checksum, "Current: c axis I");
@@ -332,6 +385,10 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         respond(response_channel, use_checksum, "Properties start at odrive root, such as axis0.requested_state");
         respond(response_channel, use_checksum, "Read: r property");
         respond(response_channel, use_checksum, "Write: w property value");
+        respond(response_channel, use_checksum, "");
+        respond(response_channel, use_checksum, "Save config: ss");
+        respond(response_channel, use_checksum, "Erase config: se");
+        respond(response_channel, use_checksum, "Reboot: sr");
 
     } else if (cmd[0] == 'i'){ // Dump device info
         // respond(response_channel, use_checksum, "Signature: %#x", STM_ID_GetSignature());
@@ -340,6 +397,15 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
         respond(response_channel, use_checksum, "Hardware version: %d.%d-%dV", HW_VERSION_MAJOR, HW_VERSION_MINOR, HW_VERSION_VOLTAGE);
         respond(response_channel, use_checksum, "Firmware version: %d.%d.%d", FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_REVISION);
         respond(response_channel, use_checksum, "Serial number: %s", serial_number_str);
+
+    } else if (cmd[0] == 's'){ // System
+        if(cmd[1] == 's') { // Save config
+            save_configuration();
+        } else if (cmd[1] == 'e'){ // Erase config
+            erase_configuration();
+        } else if (cmd[1] == 'r'){ // Reboot
+            NVIC_SystemReset();
+        }
 
     } else if (cmd[0] == 'r') { // read property
         char name[MAX_LINE_LENGTH];
@@ -378,11 +444,20 @@ void ASCII_protocol_process_line(const uint8_t* buffer, size_t len, StreamSink& 
                 }
             }
         }
-
     } else if (cmd[0] == 's') { // save configuration
         save_configuration();
-    }
-    else if (cmd[0] != 0) {
+    } else if (cmd[0] == 'u') { // Update axis watchdog.
+        unsigned motor_number;
+        int numscan = sscanf(cmd, "u %u", &motor_number);
+        if(numscan < 1){
+            respond(response_channel, use_checksum, "invalid command format");
+        } else if (motor_number >= AXIS_COUNT) {
+            respond(response_channel, use_checksum, "invalid motor %u", motor_number);
+        }else {
+            axes[motor_number]->watchdog_feed();
+        }
+
+    } else if (cmd[0] != 0) {
         respond(response_channel, use_checksum, "unknown command");
     }
 }

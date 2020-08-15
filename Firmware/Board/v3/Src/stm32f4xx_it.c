@@ -43,10 +43,14 @@
 typedef void (*ADC_handler_t)(ADC_HandleTypeDef* hadc, bool injected);
 void ADC_IRQ_Dispatch(ADC_HandleTypeDef* hadc, ADC_handler_t callback);
 
+typedef void (*TIM_capture_callback_t)(int channel, uint32_t timestamp);
+void decode_tim_capture(TIM_HandleTypeDef *htim, TIM_capture_callback_t callback);
+
 // TODO: move somewhere else
 void pwm_trig_adc_cb(ADC_HandleTypeDef* hadc, bool injected);
 void vbus_sense_adc_cb(ADC_HandleTypeDef* hadc, bool injected);
 void tim_update_cb(TIM_HandleTypeDef* htim);
+void pwm_in_cb(int channel, uint32_t timestamp);
 
 extern TIM_HandleTypeDef htim1;
 extern I2C_HandleTypeDef hi2c1;
@@ -59,6 +63,10 @@ extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
 extern ADC_HandleTypeDef hadc3;
 extern CAN_HandleTypeDef hcan1;
+extern DMA_HandleTypeDef hdma_spi3_tx;
+extern DMA_HandleTypeDef hdma_spi3_rx;
+extern SPI_HandleTypeDef hspi3;
+extern TIM_HandleTypeDef htim5;
 extern TIM_HandleTypeDef htim8;
 extern DMA_HandleTypeDef hdma_uart4_rx;
 extern DMA_HandleTypeDef hdma_uart4_tx;
@@ -83,22 +91,34 @@ void NMI_Handler(void)
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
+void get_regs(void** stack_ptr) {
+  void* volatile r0 __attribute__((unused)) = stack_ptr[0];
+  void* volatile r1 __attribute__((unused)) = stack_ptr[1];
+  void* volatile r2 __attribute__((unused)) = stack_ptr[2];
+  void* volatile r3 __attribute__((unused)) = stack_ptr[3];
+
+  void* volatile r12 __attribute__((unused)) = stack_ptr[4];
+  void* volatile lr __attribute__((unused)) = stack_ptr[5];  // Link register
+  void* volatile pc __attribute__((unused)) = stack_ptr[6];  // Program counter
+  void* volatile psr __attribute__((unused)) = stack_ptr[7];  // Program status register
+
+  volatile bool stay_looping = true;
+  while(stay_looping);
+}
+
 /**
 * @brief This function handles Hard fault interrupt.
 */
+__attribute__((naked))
 void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
-
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
-  {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
-  }
-  /* USER CODE BEGIN HardFault_IRQn 1 */
-
-  /* USER CODE END HardFault_IRQn 1 */
+  __asm(
+    " tst lr, #4     \n\t"
+    " ite eq         \n\t"
+    " mrseq r0, msp  \n\t"
+    " mrsne r0, psp  \n\t"
+    " b get_regs     \n\t"
+  );
 }
 
 /**
@@ -190,6 +210,20 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+* @brief This function handles DMA1 stream0 global interrupt.
+*/
+void DMA1_Stream0_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream0_IRQn 0 */
+
+  /* USER CODE END DMA1_Stream0_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi3_rx);
+  /* USER CODE BEGIN DMA1_Stream0_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream0_IRQn 1 */
+}
+
+/**
 * @brief This function handles DMA1 stream2 global interrupt.
 */
 void DMA1_Stream2_IRQHandler(void)
@@ -215,6 +249,20 @@ void DMA1_Stream4_IRQHandler(void)
   /* USER CODE BEGIN DMA1_Stream4_IRQn 1 */
 
   /* USER CODE END DMA1_Stream4_IRQn 1 */
+}
+
+/**
+* @brief This function handles DMA1 stream5 global interrupt.
+*/
+void DMA1_Stream5_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Stream5_IRQn 0 */
+
+  /* USER CODE END DMA1_Stream5_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_spi3_tx);
+  /* USER CODE BEGIN DMA1_Stream5_IRQn 1 */
+
+  /* USER CODE END DMA1_Stream5_IRQn 1 */
 }
 
 /**
@@ -315,6 +363,37 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
 }
 
 /**
+* @brief This function handles TIM5 global interrupt.
+*/
+void TIM5_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM5_IRQn 0 */
+
+  // We know we only use capture mode here, so bypass HAL
+  decode_tim_capture(&htim5, &pwm_in_cb);
+
+  /* USER CODE END TIM5_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim5);
+  /* USER CODE BEGIN TIM5_IRQn 1 */
+
+  /* USER CODE END TIM5_IRQn 1 */
+}
+
+/**
+* @brief This function handles SPI3 global interrupt.
+*/
+void SPI3_IRQHandler(void)
+{
+  /* USER CODE BEGIN SPI3_IRQn 0 */
+
+  /* USER CODE END SPI3_IRQn 0 */
+  HAL_SPI_IRQHandler(&hspi3);
+  /* USER CODE BEGIN SPI3_IRQn 1 */
+
+  /* USER CODE END SPI3_IRQn 1 */
+}
+
+/**
 * @brief This function handles UART4 global interrupt.
 */
 void UART4_IRQHandler(void)
@@ -366,6 +445,25 @@ void ADC_IRQ_Dispatch(ADC_HandleTypeDef* hadc, ADC_handler_t callback) {
   if (EOC && EOC_IT_EN) {
     callback(hadc, false);
     __HAL_ADC_CLEAR_FLAG(hadc, (ADC_FLAG_STRT | ADC_FLAG_EOC));
+  }
+}
+
+void decode_tim_capture(TIM_HandleTypeDef *htim, TIM_capture_callback_t callback) {
+  if(__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC1)) {
+    __HAL_TIM_CLEAR_IT(htim, TIM_IT_CC1);
+    callback(1, htim->Instance->CCR1);
+  }
+  if(__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC2)) {
+    __HAL_TIM_CLEAR_IT(htim, TIM_IT_CC2);
+    callback(2, htim->Instance->CCR2);
+  }
+  if(__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC3)) {
+    __HAL_TIM_CLEAR_IT(htim, TIM_IT_CC3);
+    callback(3, htim->Instance->CCR3);
+  }
+  if(__HAL_TIM_GET_FLAG(htim, TIM_FLAG_CC4)) {
+    __HAL_TIM_CLEAR_IT(htim, TIM_IT_CC4);
+    callback(4, htim->Instance->CCR4);
   }
 }
 

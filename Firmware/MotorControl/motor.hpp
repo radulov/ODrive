@@ -7,51 +7,6 @@
 
 #include "drv8301.h"
 
-typedef enum {
-    MOTOR_TYPE_HIGH_CURRENT = 0,
-    // MOTOR_TYPE_LOW_CURRENT = 1, //Not yet implemented
-    MOTOR_TYPE_GIMBAL = 2
-} Motor_type_t;
-
-typedef struct {
-    float phB;
-    float phC;
-} Iph_BC_t;
-
-typedef struct {
-    float p_gain; // [V/A]
-    float i_gain; // [V/As]
-    float v_current_control_integral_d; // [V]
-    float v_current_control_integral_q; // [V]
-    float Ibus; // DC bus current [A]
-    // Voltage applied at end of cycle:
-    float final_v_alpha; // [V]
-    float final_v_beta; // [V]
-    float Iq_setpoint;
-    float Iq_measured;
-    float max_allowed_current;
-} Current_control_t;
-
-// NOTE: for gimbal motors, all units of A are instead V.
-// example: vel_gain is [V/(count/s)] instead of [A/(count/s)]
-// example: current_lim and calibration_current will instead determine the maximum voltage applied to the motor.
-typedef struct {
-    bool pre_calibrated = false; // can be set to true to indicate that all values here are valid
-    int32_t pole_pairs = 7;
-    float calibration_current = 10.0f;    // [A]
-    float resistance_calib_max_voltage = 1.0f; // [V] - You may need to increase this if this voltage isn't sufficient to drive calibration_current through the motor.
-    float phase_inductance = 0.0f;        // to be set by measure_phase_inductance
-    float phase_resistance = 0.0f;        // to be set by measure_phase_resistance
-    int32_t direction = 1;                // 1 or -1
-    Motor_type_t motor_type = MOTOR_TYPE_HIGH_CURRENT;
-
-    // Read out max_allowed_current to see max supported value for current_lim.
-    // float current_lim = 70.0f; //[A]
-    float current_lim = 10.0f;  //[A]
-    // Value used to compute shunt amplifier gains
-    float requested_current_range = 70.0f; // [A]
-} MotorConfig_t;
-
 class Motor {
 public:
     enum Error_t {
@@ -65,7 +20,61 @@ public:
         ERROR_BRAKE_CURRENT_OUT_OF_RANGE = 0x0040,
         ERROR_MODULATION_MAGNITUDE = 0x0080,
         ERROR_BRAKE_DEADTIME_VIOLATION = 0x0100,
-        ERROR_UNEXPECTED_TIMER_CALLBACK = 0x0200
+        ERROR_UNEXPECTED_TIMER_CALLBACK = 0x0200,
+        ERROR_CURRENT_SENSE_SATURATION = 0x0400,
+        ERROR_INVERTER_OVER_TEMP = 0x0800,
+        ERROR_CURRENT_UNSTABLE = 0x1000
+    };
+
+    enum MotorType_t {
+        MOTOR_TYPE_HIGH_CURRENT = 0,
+        // MOTOR_TYPE_LOW_CURRENT = 1, //Not yet implemented
+        MOTOR_TYPE_GIMBAL = 2
+    };
+
+    struct Iph_BC_t {
+        float phB;
+        float phC;
+    };
+
+    struct CurrentControl_t{
+        float p_gain; // [V/A]
+        float i_gain; // [V/As]
+        float v_current_control_integral_d; // [V]
+        float v_current_control_integral_q; // [V]
+        float Ibus; // DC bus current [A]
+        // Voltage applied at end of cycle:
+        float final_v_alpha; // [V]
+        float final_v_beta; // [V]
+        float Iq_setpoint; // [A]
+        float Iq_measured; // [A]
+        float Id_measured; // [A]
+        float I_measured_report_filter_k;
+        float max_allowed_current; // [A]
+        float overcurrent_trip_level; // [A]
+    };
+
+    // NOTE: for gimbal motors, all units of A are instead V.
+    // example: vel_gain is [V/(count/s)] instead of [A/(count/s)]
+    // example: current_lim and calibration_current will instead determine the maximum voltage applied to the motor.
+    struct Config_t {
+        bool pre_calibrated = false; // can be set to true to indicate that all values here are valid
+        int32_t pole_pairs = 7;
+        float calibration_current = 10.0f;    // [A]
+        float resistance_calib_max_voltage = 2.0f; // [V] - You may need to increase this if this voltage isn't sufficient to drive calibration_current through the motor.
+        float phase_inductance = 0.0f;        // to be set by measure_phase_inductance
+        float phase_resistance = 0.0f;        // to be set by measure_phase_resistance
+        int32_t direction = 0;                // 1 or -1 (0 = unspecified)
+        MotorType_t motor_type = MOTOR_TYPE_HIGH_CURRENT;
+        // Read out max_allowed_current to see max supported value for current_lim.
+        // float current_lim = 70.0f; //[A]
+        float current_lim = 10.0f;  //[A]
+        float current_lim_tolerance = 1.25f;  // multiple of current_lim
+        // Value used to compute shunt amplifier gains
+        float requested_current_range = 60.0f; // [A]
+        float current_control_bandwidth = 1000.0f;  // [rad/s]
+        float inverter_temp_limit_lower = 100;
+        float inverter_temp_limit_upper = 120;
     };
 
     enum TimingLog_t {
@@ -90,12 +99,11 @@ public:
 
     Motor(const MotorHardwareConfig_t& hw_config,
          const GateDriverHardwareConfig_t& gate_driver_config,
-         MotorConfig_t& config);
+         Config_t& config);
 
     bool arm();
     void disarm();
     void setup() {
-        update_current_controller_gains();
         DRV8301_setup();
     }
     void reset_current_control();
@@ -105,6 +113,9 @@ public:
     bool check_DRV_fault();
     void set_error(Error_t error);
     bool do_checks();
+    float get_inverter_temp();
+    bool update_thermal_limits();
+    float effective_current_lim();
     void log_timing(TimingLog_t log_idx);
     float phase_current_from_adcval(uint32_t ADCValue);
     bool measure_phase_resistance(float test_current, float max_voltage);
@@ -112,13 +123,13 @@ public:
     bool run_calibration();
     bool enqueue_modulation_timings(float mod_alpha, float mod_beta);
     bool enqueue_voltage_timings(float v_alpha, float v_beta);
-    bool FOC_voltage(float v_d, float v_q, float phase);
-    bool FOC_current(float Id_des, float Iq_des, float phase);
-    bool update(float current_setpoint, float phase);
+    bool FOC_voltage(float v_d, float v_q, float pwm_phase);
+    bool FOC_current(float Id_des, float Iq_des, float I_phase, float pwm_phase);
+    bool update(float current_setpoint, float phase, float phase_vel);
 
     const MotorHardwareConfig_t& hw_config_;
     const GateDriverHardwareConfig_t gate_driver_config_;
-    MotorConfig_t& config_;
+    Config_t& config_;
     Axis* axis_ = nullptr; // set by Axis constructor
 
 //private:
@@ -143,7 +154,7 @@ public:
     Iph_BC_t current_meas_ = {0.0f, 0.0f};
     Iph_BC_t DC_calib_ = {0.0f, 0.0f};
     float phase_current_rev_gain_ = 0.0f; // Reverse gain for ADC to Amps (to be set by DRV8301_setup)
-    Current_control_t current_control_ = {
+    CurrentControl_t current_control_ = {
         .p_gain = 0.0f,        // [V/A] should be auto set after resistance and inductance measurement
         .i_gain = 0.0f,        // [V/As] should be auto set after resistance and inductance measurement
         .v_current_control_integral_d = 0.0f,
@@ -153,10 +164,14 @@ public:
         .final_v_beta = 0.0f,
         .Iq_setpoint = 0.0f,
         .Iq_measured = 0.0f,
+        .Id_measured = 0.0f,
+        .I_measured_report_filter_k = 1.0f,
         .max_allowed_current = 0.0f,
+        .overcurrent_trip_level = 0.0f,
     };
     DRV8301_FaultType_e drv_fault_ = DRV8301_FaultType_NoFault;
     DRV_SPI_8301_Vars_t gate_driver_regs_; //Local view of DRV registers (initialized by DRV8301_setup)
+    float thermal_current_lim_ = 10.0f;  //[A]
 
     // Communication protocol definitions
     auto make_protocol_definitions() {
@@ -169,6 +184,8 @@ public:
             make_protocol_property("DC_calib_phB", &DC_calib_.phB),
             make_protocol_property("DC_calib_phC", &DC_calib_.phC),
             make_protocol_property("phase_current_rev_gain", &phase_current_rev_gain_),
+            make_protocol_ro_property("thermal_current_lim", &thermal_current_lim_),
+            make_protocol_function("get_inverter_temp", *this, &Motor::get_inverter_temp),
             make_protocol_object("current_control",
                 make_protocol_property("p_gain", &current_control_.p_gain),
                 make_protocol_property("i_gain", &current_control_.i_gain),
@@ -179,7 +196,10 @@ public:
                 make_protocol_property("final_v_beta", &current_control_.final_v_beta),
                 make_protocol_property("Iq_setpoint", &current_control_.Iq_setpoint),
                 make_protocol_property("Iq_measured", &current_control_.Iq_measured),
-                make_protocol_property("max_allowed_current", &current_control_.max_allowed_current)
+                make_protocol_property("Id_measured", &current_control_.Id_measured),
+                make_protocol_property("I_measured_report_filter_k", &current_control_.I_measured_report_filter_k),
+                make_protocol_ro_property("max_allowed_current", &current_control_.max_allowed_current),
+                make_protocol_ro_property("overcurrent_trip_level", &current_control_.overcurrent_trip_level)
             ),
             make_protocol_object("gate_driver",
                 make_protocol_ro_property("drv_fault", &drv_fault_)
@@ -209,7 +229,12 @@ public:
                 make_protocol_property("direction", &config_.direction),
                 make_protocol_property("motor_type", &config_.motor_type),
                 make_protocol_property("current_lim", &config_.current_lim),
-                make_protocol_property("requested_current_range", &config_.requested_current_range)
+                make_protocol_property("current_lim_tolerance", &config_.current_lim_tolerance),
+                make_protocol_property("inverter_temp_limit_lower", &config_.inverter_temp_limit_lower),
+                make_protocol_property("inverter_temp_limit_upper", &config_.inverter_temp_limit_upper),
+                make_protocol_property("requested_current_range", &config_.requested_current_range),
+                make_protocol_property("current_control_bandwidth", &config_.current_control_bandwidth,
+                    [](void* ctx) { static_cast<Motor*>(ctx)->update_current_controller_gains(); }, this)
             )
         );
     }

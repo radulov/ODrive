@@ -106,12 +106,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PAPin PAPin PAPin */
-  GPIO_InitStruct.Pin = GPIO_3_Pin|GPIO_4_Pin|GPIO_7_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
   /*Configure GPIO pins : PBPin PBPin */
   GPIO_InitStruct.Pin = GPIO_6_Pin|GPIO_8_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -124,6 +118,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(EN_GATE_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PtPin */
+  GPIO_InitStruct.Pin = GPIO_7_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIO_7_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PtPin */
   GPIO_InitStruct.Pin = nFAULT_Pin;
@@ -236,6 +236,8 @@ bool GPIO_subscribe(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin,
   GPIO_InitStruct.Pull = pull_up_down;
   HAL_GPIO_Init(GPIO_port, &GPIO_InitStruct);
 
+  // Clear any previous triggers
+  __HAL_GPIO_EXTI_CLEAR_IT(GPIO_pin);
   // Enable interrupt
   HAL_NVIC_SetPriority(get_irq_number(GPIO_pin), 0, 0);
   HAL_NVIC_EnableIRQ(get_irq_number(GPIO_pin));
@@ -286,6 +288,15 @@ GPIO_TypeDef* get_gpio_port_by_pin(uint16_t GPIO_pin){
 #ifdef GPIO_5_GPIO_Port
     case 5: return GPIO_5_GPIO_Port; break;
 #endif
+#ifdef GPIO_6_GPIO_Port
+    case 6: return GPIO_6_GPIO_Port; break;
+#endif
+#ifdef GPIO_7_GPIO_Port
+    case 7: return GPIO_7_GPIO_Port; break;
+#endif
+#ifdef GPIO_8_GPIO_Port
+    case 8: return GPIO_8_GPIO_Port; break;
+#endif
     default: return GPIO_1_GPIO_Port;
   }
 }
@@ -298,6 +309,15 @@ uint16_t get_gpio_pin_by_pin(uint16_t GPIO_pin){
     case 4: return GPIO_4_Pin; break;
 #ifdef GPIO_5_Pin
     case 5: return GPIO_5_Pin; break;
+#endif
+#ifdef GPIO_6_Pin
+    case 6: return GPIO_6_Pin; break;
+#endif
+#ifdef GPIO_7_Pin
+    case 7: return GPIO_7_Pin; break;
+#endif
+#ifdef GPIO_8_Pin
+    case 8: return GPIO_8_Pin; break;
 #endif
     default: return GPIO_1_Pin;
   }

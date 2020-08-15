@@ -2,17 +2,149 @@
 Please add a note of your changes below this heading if you make a Pull Request.
 
 # Releases
+## [0.4.12] - 2020-05-06
+### Fixed
+* Fixed a numerical issue in the trajectory planner that could cause sudden jumps of the position setpoint
+
+## [0.4.11] - 2019-07-25
+### Added
+* Separate lockin configs for sensorless, index search, and general.
+* Check current limit violation: added `ERROR_CURRENT_UNSTABLE`, `motor.config.current_lim_tolerance`.
+
+### Changed
+* Ascii command for reboot changed from `sb` to `sr`.
+
+# Releases
+## [0.4.10] - 2019-04-24
+### Fixed
+* Index search would trigger in the wrong place.
+
+## [0.4.9] - 2019-04-23
+### Added
+* A release target for ODrive v3.6
+* Communication watchdog feature.
+* `encoder.set_linear_count(count)` function.
+* Configurable encoder offset calibration distance and speed:`calib_scan_distance` and `calib_scan_omega`
+* Encoder offset calibration debug variable `calib_scan_response`
+* Lock-in drive feature
+* Script to enable using a hall signal as index edge.
+
+### Changed
+* Encoder index search now based on the new lock-in drive feature
+
+### Fixed
+* Encoder index interrupts now disabled when not searching
+
+## [0.4.8] - 2019-02-25
+### Added
+* `dump_errors()` utility function in odrivetool to dump, decode and optionally clear errors.
+* `f` command to ascii protocol to get encoder position and velocity feedback.
+* `q` command to ascii protocol. It is like the old `p` command, but velocity and current mean limits, not feed-forward.
+* `ss`, `se`, `sr` commands to ascii protocol, for save config, erase config and reboot.
+* `move_incremental` function for relative trajectory moves.
+* `encoder.config.ignore_illegal_hall_state` option.
+* `encoder.config.enable_phase_interpolation` option. Setting to false may reduce jerky pulsations at low speed when using hall sensor feedback.
+* Analog input. Used the same way as the PWM input mappings.
+* Voltage limit soft clamping instead of ERROR_MODULATION_MAGNITUDE in gimbal motor closed loop.
+* Thermal current limit with linear derating.
+
+### Changed
+* Unified lockin drive modes. Current for index searching and encoder offset calibration now moved to axis.lockin.current.
+
+### Fixed
+* Added required 1.5 cycle phase shift between ADC and PWM, lack thereof caused unstable current controller at high eRPM.
+
+## [0.4.7] - 2018-11-28
+### Added
+* Overspeed fault
+* Current sense saturation fault.
+* Suppress startup transients by sampling encoder estimate into position setpoint when entering closed loop control.
+* Make step dir gpio pins configurable.
+* Configuration variable `encoder.config.zero_count_on_find_idx`, true by default. Set to false to leave the initial encoder count to be where the axis was at boot.
+* Circular position setpoint mode: position setpoints wrapped [0, cpr). Useful for infinite incremental position control.
+* Velocity setpoint ramping. Use velocity control mode, and set `controller.vel_ramp_enable` to true. This will ramp `controller.vel_setpoint` towards `controller.vel_ramp_target` at a ramp rate of `controller.config.vel_ramp_rate`.
+
+### Changed
+* Increased switching frequency from around 8kHz to 24kHz. Control loops still run at 8kHz.
+* Renamed `axis.enable_step_dir` to `axis.step_dir_active`
+* New process for working with STM32CubeMX.
+
+### Fixed
+* Would get ERROR_CONTROL_DEADLINE_MISSED along with every ERROR_PHASE_RESISTANCE_OUT_OF_RANGE.
+* ODrive tool can now run interactive nested scripts with "%run -i script.py"
+
+## [0.4.6] - 2018-10-07
+### Fixed
+* Broken printing of floats on ascii protocol
+
+## [0.4.5] - 2018-10-06
+### Added
+* **Trapezoidal Trajectory Planner**
+* Hook to execute protocol property written callback
+* -Wdouble-promotion warning to compilation
+
+### Changed
+* Make python tools compatible with python 2.7 (so it can be used with ROS)
+  * Threading API constructor can't take the daemon parameter, so all thread creation had to be expanded out.
+  * `TimeoutError` isn't defined, but it makes for more readable code, so I defined it as an OSError subclass.
+  * `ModuleNotFoundError` is replaced by the older ImportError.
+  * Print function imported from future
+* Using new hooks to calculate:
+  * `motor.config.current_control_bandwidth`
+    * This deprecates `motor.set_current_control_bandwidth()`
+  * `encoder.config.bandwidth`
+* Default value for `motor.resistance_calib_max_voltage` changed to 2.0
+
+### Fixed
+* An issue where the axis state machine would jump in and out of idle when there is an error
+* There is a [bug](https://github.com/ARM-software/CMSIS_5/issues/267) in the arm fast math library, which gives spikes in the output of arm_cos_f32 for input values close to -pi/2. We fixed the bug locally, and hence are using "our_arm_cos_f32".
+
+## [0.4.4] - 2018-09-18
+### Fixed
+* Serious reliability issue with USB communication where packets on Native and the CDC interface would collide with each other.
+
+## [0.4.3] - 2018-08-30
+### Added
+* Encoder position count "homed" to zero when index is found.
+
+### Changed
+* We now enforce encoder offset calibration must happen after index is found (if using index)
+* Renaming of the velocity estimate `pll_vel` -> `vel_estimate`.
+* Hardcoded maximum inductance now 2500 uH.
+
+### Fixed
+* Incorrect shifting of offset during index callback
+* Once you got an axis error `ERROR_INVALID_STATE` you could never clear it
+* Char to int conversion to read motornum on arduino example
+* GPIO above #5 would not be used correctly in some cases
+
+## [0.4.2] - 2018-08-04
+### Added
+* Hall sensor feedback
+* Configurable RC PWM input
+* Ability to read axis FET temperature
+* Config settings for:
+  * `motor.config.requested_current_range`
+  * `motor.config.current_control_bandwidth` and `motor.set_current_control_bandwidth`. Latter required to invoke gain recalculation.
+  * `encoder.config.bandwidth`
+  * `sensorless_estimator.config.pm_flux_linkage`
+
+## [0.4.1] - 2018-07-01
+### Fixed
+* Encoder errors would show up as Axis error `ERROR_MOTOR_FAILED` instead of `ERROR_ENCODER_FAILED`.
+* Various pip install dependencies
+* Ability for python tools threads to quit properly
+* dfuse error prints now python3 compatible
 
 ## [0.4.0] - 2018-06-10
-
 ### Added
- * Encoder can now go forever in velocity/torque mode due to using circular encoder space.
- * Protocol supports function return values
- * bake Git-derived firmware version into firmware binary. The firmware version is exposed through the `fw_version_[...]` properties.
- * `make write_otp` command to burn the board version onto the ODrive's one-time programmable memory. If you have an ODrive v3.4 or older, you should run this once for a better firmware update user experience in the future. Run the command without any options for more details. Once set, the board version is exposed through the `hw_version_[...]` properties.
- * infrastructure to publish the python tools to PyPi. See `tools/setup.py` for details.
- * Automated test script `run_tests.py`
- * System stats (e.g. stack usage) are exposed under `<odrv>.system_stats`
+* Encoder can now go forever in velocity/torque mode due to using circular encoder space.
+* Protocol supports function return values
+* bake Git-derived firmware version into firmware binary. The firmware version is exposed through the `fw_version_[...]` properties.
+* `make write_otp` command to burn the board version onto the ODrive's one-time programmable memory. If you have an ODrive v3.4 or older, you should run this once for a better firmware update user experience in the future. Run the command without any options for more details. Once set, the board version is exposed through the `hw_version_[...]` properties.
+* infrastructure to publish the python tools to PyPi. See `tools/setup.py` for details.
+* Automated test script `run_tests.py`
+* System stats (e.g. stack usage) are exposed under `<odrv>.system_stats`
 
 ### Changed
 * DFU script updates
@@ -39,7 +171,6 @@ Please add a note of your changes below this heading if you make a Pull Request.
 * USB issue where the device would stop responding when the host script would quit abruptly or reset the device during operation
 
 ## [0.3.6] - 2018-03-26
-
 ### Added
 * **Storing of configuration parameters to Non Volatile Memory**
 * **USB Bootloader**
@@ -62,7 +193,6 @@ Please add a note of your changes below this heading if you make a Pull Request.
 * malloc now fails if we run out of memory (before it would always succeed even if we are out of ram...)
 
 ## [0.3.5] - 2018-03-04
-
 ### Added
 * Reporting error if your encoder CPR is incorrect
 * Ability to start anticogging calibration over USB protocol
@@ -76,12 +206,10 @@ Please add a note of your changes below this heading if you make a Pull Request.
 * Build system is now tup instead of make. Please check the [Readme](README.md#installing-prerequisites) for installation instructions.
 
 ## [0.3.4] - 2018-02-13
-
 ### Fixed
 * Broken way to check for python 2. Python 2 not supported yet.
 
 ## [0.3.3] - 2018-02-12
-
 ### Added
 * Liveplotter script
 * Automatic recovery of USB halt/stall condition
@@ -93,14 +221,12 @@ Please add a note of your changes below this heading if you make a Pull Request.
 * USB CSC (USB serial) now reports a sensible baud rate
 
 ## [0.3.2] - 2018-02-02
-
 ### Added
 * Gimbal motor mode
 * Encoder index pulse support
 * `resistance_calib_max_voltage` parameter
 
 ## [0.3.1] - 2018-01-18
-
 ### Added
 * UUID Endpoint
 * Reporting of correct ODrive version on USB descriptor
