@@ -8,6 +8,12 @@
 		},
 		{
 			"path": "docs"
+		},
+		{
+			"path": "/Users/nathan/Documents/QPWoofer"
+		},
+		{
+			"path": "/Users/nathan/Documents"
 		}
 	],
 	"settings": {
@@ -55,6 +61,8 @@
 			"chrono": "cpp",
 			"condition_variable": "cpp",
 			"future": "cpp",
+			"unordered_map": "cpp",
+			"cmath": "cpp"
 			"arm_math.h": "c"
 		}
 	}

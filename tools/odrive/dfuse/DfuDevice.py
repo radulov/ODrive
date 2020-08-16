@@ -40,7 +40,7 @@ class DfuDevice:
             self.intf = intf[1]
         else:
             self.intf = intf
-        
+
         self.intf.set_altsetting()
 
     def control_msg(self, requestType, request, value, buffer, timeout=None):
@@ -48,18 +48,18 @@ class DfuDevice:
 
     def detach(self, timeout):
         return self.control_msg(DFU_REQUEST_SEND, DFU_DETACH, timeout, None)
-    
+
     def dnload(self, blockNum, data):
         cnt = self.control_msg(DFU_REQUEST_SEND, DFU_DNLOAD, blockNum, list(data))
         return cnt
-    
+
     def upload(self, blockNum, size):
         return self.control_msg(DFU_REQUEST_RECEIVE, DFU_UPLOAD, blockNum, size)
 
     def get_status(self, timeout=None):
         status = self.control_msg(DFU_REQUEST_RECEIVE, DFU_GETSTATUS, 0, 6, timeout=timeout)
         return (status[0], status[4], status[1] + (status[2] << 8) + (status[3] << 16), status[5])
-    
+
     def clear_status(self):
         self.control_msg(DFU_REQUEST_SEND, DFU_CLRSTATUS, 0, None)
 
@@ -77,7 +77,7 @@ class DfuDevice:
 
     def read(self, block, size):
         return self.upload(block + 2, size)
-    
+
     def erase(self, pa):
         return self.dnload(0x0, [0x41] + address_to_4bytes(pa))
 
@@ -91,18 +91,19 @@ class DfuDevice:
             states = state
 
         try:
+            time.sleep(0.100)
             status = self.get_status()
         except:
             time.sleep(0.100)
             status = self.get_status()
-        
+
         while (status[1] in states):
             claimed_timeout = status[2]
             actual_timeout = int(max(timeout or 0, claimed_timeout))
             #print("timeout = %f, claimed = %f" % (timeout, status[2]))
             #time.sleep(timeout)
             status = self.get_status(timeout=actual_timeout)
-        
+
         return status
 
     ## High level functions ##
@@ -162,7 +163,7 @@ class DfuDevice:
         status = self.wait_while_state(DfuState.DFU_DOWNLOAD_SYNC)
         if status[1] != DfuState.DFU_IDLE:
             raise RuntimeError("An error occured. Device Status: {!r}".format(status))
-        
+
 
     def erase_sector(self, sector):
         self.set_alternate_safe(sector['alt'])
@@ -176,7 +177,7 @@ class DfuDevice:
         self.set_address_safe(sector['addr'])
 
         transfer_size = fractions.gcd(sector['len'], MAX_TRANSFER_SIZE)
-        
+
         blocks = [data[i:i + transfer_size] for i in range(0, len(data), transfer_size)]
         for blocknum, block in enumerate(blocks):
             #print('write to {:08X} ({} bytes)'.format(
@@ -197,7 +198,7 @@ class DfuDevice:
         transfer_size = fractions.gcd(sector['len'], MAX_TRANSFER_SIZE)
         #blocknum_offset = int((sector['addr'] - sector['baseaddr']) / transfer_size)
 
-        
+
         data = array.array(u'B')
         for blocknum in range(int(sector['len'] / transfer_size)):
             #print('read at {:08X}'.format(sector['addr'] + blocknum * TRANSFER_SIZE))

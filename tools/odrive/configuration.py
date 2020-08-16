@@ -1,7 +1,8 @@
-
 import json
 import os
 import tempfile
+import odrive
+
 import fibre.remote_object
 from odrive.utils import OperationAbortedException, yes_no_prompt
 
@@ -61,7 +62,7 @@ def backup_config(device, filename, logger):
 
 def restore_config(device, filename, logger):
     """
-    Restores the configuration stored in a file 
+    Restores the configuration stored in a file
     """
 
     if filename is None:
@@ -77,6 +78,6 @@ def restore_config(device, filename, logger):
         logger.info(error)
     if errors:
         logger.warn("Some of the configuration could not be restored.")
-    
+
     device.save_configuration()
     logger.info("Configuration restored.")
